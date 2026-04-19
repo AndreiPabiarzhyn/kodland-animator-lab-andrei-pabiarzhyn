@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { toggleTheme } from "@/animation/hooks";
 import { toast } from "sonner";
-import { uid } from "@/animation/utils";
 import { KodlandLogo } from "./KodlandLogo";
 
 export const TopBar = () => {
