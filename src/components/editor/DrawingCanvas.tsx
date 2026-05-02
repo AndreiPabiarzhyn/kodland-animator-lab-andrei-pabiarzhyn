@@ -388,6 +388,21 @@ export const DrawingCanvas = ({ className }: Props) => {
     drawingRef.current.active = true;
     drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     drawingRef.current.startSnapshot = activeLayer.dataUrl;
+    drawingLayerIdRef.current = activeLayer.id;
+    // Force base recomposite (excluding active layer) by re-rendering it now
+    {
+      const base = baseRef.current!;
+      const bctx = base.getContext("2d")!;
+      bctx.clearRect(0, 0, base.width, base.height);
+      for (const layer of frame.layers) {
+        if (!layer.visible) continue;
+        if (layer.id === activeLayer.id) continue;
+        try {
+          const img = await loadImage(layer.dataUrl);
+          bctx.drawImage(img, 0, 0);
+        } catch { /* ignore */ }
+      }
+    }
 
     // Render active layer into liveRef so we can edit only it directly
     const live = liveRef.current!;
@@ -517,6 +532,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     drawingRef.current.active = false;
     const live = liveRef.current!;
     updateActiveLayerData(live.toDataURL("image/png"), drawingRef.current.startSnapshot ?? undefined);
+    drawingLayerIdRef.current = null;
     // Clear live (the composited base will redraw from store)
     live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
   };
