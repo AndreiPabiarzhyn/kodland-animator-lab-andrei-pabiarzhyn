@@ -51,9 +51,9 @@ export const DrawingCanvas = ({ className }: Props) => {
     active: boolean;
     last: { x: number; y: number; pressure: number } | null;
     startSnapshot: string | null;
-    /** Layer dataUrl in use when stroke began (kept stable while drawing) */
-    layerImageBitmap: ImageBitmap | HTMLImageElement | null;
-  }>({ active: false, last: null, startSnapshot: null, layerImageBitmap: null });
+  }>({ active: false, last: null, startSnapshot: null });
+  /** When drawing, base canvas excludes this layer id so live canvas owns it */
+  const drawingLayerIdRef = useRef<string | null>(null);
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
     active: false, startX: 0, startY: 0, tx0: 0, ty0: 0,
   });
@@ -89,6 +89,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     (async () => {
       for (const layer of frame.layers) {
         if (!layer.visible) continue;
+        if (drawingLayerIdRef.current === layer.id) continue;
         try {
           const img = await loadImage(layer.dataUrl);
           if (cancelled) return;
