@@ -51,7 +51,9 @@ export const DrawingCanvas = ({ className }: Props) => {
     active: boolean;
     last: { x: number; y: number; pressure: number } | null;
     startSnapshot: string | null;
-  }>({ active: false, last: null, startSnapshot: null });
+    /** Layer dataUrl in use when stroke began (kept stable while drawing) */
+    layerImageBitmap: ImageBitmap | HTMLImageElement | null;
+  }>({ active: false, last: null, startSnapshot: null, layerImageBitmap: null });
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
     active: false, startX: 0, startY: 0, tx0: 0, ty0: 0,
   });
@@ -74,7 +76,8 @@ export const DrawingCanvas = ({ className }: Props) => {
     return () => ro.disconnect();
   }, [project.width, project.height]);
 
-  // Composite all visible layers into baseRef whenever frame/layers change
+  // Composite all visible layers into baseRef whenever frame/layers change.
+  // While drawing on the active layer we exclude it (live canvas shows it).
   useEffect(() => {
     const cv = baseRef.current;
     if (!cv || !frame) return;
