@@ -1,9 +1,40 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/animation/store";
 import { Plus, Copy, Trash2, Play, Pause, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { Frame } from "@/animation/types";
+import { loadImage } from "@/animation/utils";
+
+const FrameThumb = ({ frame, w, h }: { frame: Frame; w: number; h: number }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  // Re-render when any layer dataUrl changes
+  const sig = useMemo(
+    () => frame.layers.map((l) => `${l.id}:${l.visible ? 1 : 0}:${l.dataUrl.length}:${l.dataUrl.slice(-12)}`).join("|"),
+    [frame.layers],
+  );
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d")!;
+    ctx.clearRect(0, 0, w, h);
+    let cancelled = false;
+    (async () => {
+      for (const l of frame.layers) {
+        if (!l.visible) continue;
+        try {
+          const img = await loadImage(l.dataUrl);
+          if (cancelled) return;
+          ctx.drawImage(img, 0, 0, w, h);
+        } catch { /* ignore */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sig, w, h, frame.layers]);
+  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
+};
 
 export const Timeline = () => {
   const project = useStore((s) => s.project);
@@ -18,7 +49,6 @@ export const Timeline = () => {
   const play = useStore((s) => s.play);
   const pause = useStore((s) => s.pause);
 
-  // Playback loop
   const rafRef = useRef<number>();
   const lastTickRef = useRef<number>(0);
   useEffect(() => {
@@ -49,9 +79,11 @@ export const Timeline = () => {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
+  const thumbW = 112;
+  const thumbH = Math.round(thumbW * (project.height / project.width));
+
   return (
     <div className="panel p-3 flex flex-col gap-3">
-      {/* Controls row */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button
           size="sm"
@@ -111,7 +143,6 @@ export const Timeline = () => {
         </div>
       </div>
 
-      {/* Frames strip */}
       <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-2 -mx-1 px-1">
         {project.frames.map((f, i) => (
           <button
@@ -129,21 +160,17 @@ export const Timeline = () => {
             onClick={() => setCurrentFrame(i)}
             className={cn(
               "relative shrink-0 rounded-xl transition-all overflow-hidden border-2",
-              "h-20 w-28 bg-card",
+              "bg-card",
               i === currentFrame
-                ? "border-primary shadow-pop scale-105"
+                ? "border-primary shadow-pop ring-2 ring-primary/40"
                 : "border-border hover:border-muted-foreground/40",
-              overIdx === i && dragIdx !== null && "ring-2 ring-accent",
+              overIdx === i && dragIdx !== null && dragIdx !== i && "ring-2 ring-accent",
             )}
+            style={{ width: thumbW, height: thumbH + 4 }}
             aria-label={`Frame ${i + 1}`}
           >
             <div className="absolute inset-0 checkerboard" />
-            <img
-              src={f.dataUrl}
-              alt=""
-              className="absolute inset-0 w-full h-full object-contain"
-              draggable={false}
-            />
+            <FrameThumb frame={f} w={thumbW} h={thumbH} />
             <span className="absolute top-1 left-1 text-[10px] font-bold bg-background/80 backdrop-blur px-1.5 py-0.5 rounded-md tabular-nums">
               {i + 1}
             </span>
@@ -151,7 +178,8 @@ export const Timeline = () => {
         ))}
         <button
           onClick={() => addFrame()}
-          className="shrink-0 h-20 w-28 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-center text-muted-foreground hover:text-primary"
+          className="shrink-0 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-center text-muted-foreground hover:text-primary"
+          style={{ width: thumbW, height: thumbH + 4 }}
           aria-label="Add frame"
         >
           <Plus className="h-6 w-6" />
