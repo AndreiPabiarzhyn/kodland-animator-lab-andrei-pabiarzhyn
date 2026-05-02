@@ -1,19 +1,15 @@
-import { Brush, Eraser, PaintBucket, Minus, Square, Circle, Pipette, Hand, Pencil } from "lucide-react";
+import { Eraser, PaintBucket, Pipette, Pencil, BoxSelect } from "lucide-react";
 import { ToolId } from "@/animation/types";
 import { useStore } from "@/animation/store";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const TOOLS: Array<{ id: ToolId; label: string; key: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: "brush", label: "Brush", key: "B", icon: Brush },
   { id: "pencil", label: "Pencil", key: "P", icon: Pencil },
   { id: "eraser", label: "Eraser", key: "E", icon: Eraser },
   { id: "fill", label: "Fill", key: "G", icon: PaintBucket },
-  { id: "line", label: "Line", key: "L", icon: Minus },
-  { id: "rect", label: "Rectangle", key: "R", icon: Square },
-  { id: "ellipse", label: "Ellipse", key: "O", icon: Circle },
-  { id: "eyedropper", label: "Eyedropper", key: "I", icon: Pipette },
-  { id: "pan", label: "Pan", key: "H", icon: Hand },
+  { id: "select", label: "Select / Transform", key: "S", icon: BoxSelect },
+  { id: "eyedropper", label: "Color Picker", key: "I", icon: Pipette },
 ];
 
 export const ToolPalette = () => {
