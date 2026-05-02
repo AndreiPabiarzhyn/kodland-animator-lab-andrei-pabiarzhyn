@@ -6,7 +6,7 @@ declare module "gif.js" {
     height?: number;
     workerScript?: string;
     background?: string;
-    transparent?: string | null;
+    transparent?: string | number | null;
     repeat?: number;
     debug?: boolean;
   }

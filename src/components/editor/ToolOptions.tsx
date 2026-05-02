@@ -1,7 +1,6 @@
 import { useStore } from "@/animation/store";
 import { DEFAULT_PALETTE } from "@/animation/types";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +49,7 @@ export const ToolOptions = () => {
         <Slider
           value={[tool.size]}
           min={1}
-          max={80}
+          max={120}
           step={1}
           onValueChange={(v) => setTool({ size: v[0] })}
         />
@@ -69,18 +68,6 @@ export const ToolOptions = () => {
           step={1}
           onValueChange={(v) => setTool({ opacity: v[0] / 100 })}
         />
-      </div>
-
-      {/* Toggles */}
-      <div className="space-y-2 pt-1">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="mirror" className="text-sm">Mirror</Label>
-          <Switch id="mirror" checked={tool.mirror} onCheckedChange={(v) => setTool({ mirror: v })} />
-        </div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="pressure" className="text-sm">Pressure</Label>
-          <Switch id="pressure" checked={tool.pressure} onCheckedChange={(v) => setTool({ pressure: v })} />
-        </div>
       </div>
     </div>
   );

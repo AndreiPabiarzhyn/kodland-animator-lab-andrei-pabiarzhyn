@@ -1,14 +1,20 @@
 import { create } from "zustand";
-import { Frame, OnionSettings, Project, ToolSettings } from "./types";
+import { Frame, Layer, OnionSettings, Project, ToolSettings } from "./types";
 import { createBlankDataUrl, uid } from "./utils";
 
-const STORAGE_KEY = "kodflip:project:v1";
+const STORAGE_KEY = "kodflip:project:v2";
 
-const makeFrame = (width: number, height: number, bg: string): Frame => ({
+const makeLayer = (name: string, w: number, h: number): Layer => ({
   id: uid(),
-  dataUrl: createBlankDataUrl(width, height, bg),
-  hold: 1,
+  name,
+  visible: true,
+  dataUrl: createBlankDataUrl(w, h),
 });
+
+const makeFrame = (w: number, h: number): Frame => {
+  const l = makeLayer("Layer 1", w, h);
+  return { id: uid(), layers: [l], activeLayerId: l.id, hold: 1 };
+};
 
 const defaultProject = (): Project => {
   const w = 800, h = 600;
@@ -17,14 +23,16 @@ const defaultProject = (): Project => {
     name: "My Animation",
     width: w,
     height: h,
-    bgColor: "#ffffff",
+    bgColor: "transparent",
     fps: 12,
     loop: true,
-    frames: [makeFrame(w, h, "#ffffff")],
+    frames: [makeFrame(w, h)],
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
 };
+
+type LayerHistoryEntry = { frameId: string; layerId: string; dataUrl: string };
 
 interface AppState {
   project: Project;
@@ -32,7 +40,8 @@ interface AppState {
   tool: ToolSettings;
   onion: OnionSettings;
   isPlaying: boolean;
-  // Branch undo/redo per-frame (last data url snapshots before edit)
+
+  /** Per-layer history (snapshots before edit) */
   history: Record<string, string[]>;
   future: Record<string, string[]>;
 
@@ -47,39 +56,50 @@ interface AppState {
   duplicateFrame: (i?: number) => void;
   deleteFrame: (i?: number) => void;
   moveFrame: (from: number, to: number) => void;
-  updateFrameData: (i: number, dataUrl: string, snapshotPrev?: string) => void;
   setFrameHold: (i: number, hold: number) => void;
+
+  // layer ops (operate on current frame)
+  addLayer: () => void;
+  duplicateLayer: (layerId?: string) => void;
+  deleteLayer: (layerId?: string) => void;
+  moveLayer: (from: number, to: number) => void;
+  renameLayer: (layerId: string, name: string) => void;
+  toggleLayerVisible: (layerId: string) => void;
+  setActiveLayer: (layerId: string) => void;
+  updateActiveLayerData: (dataUrl: string, snapshotPrev?: string) => void;
+  /** Replace a specific layer's pixels (used for transforms) */
+  updateLayerData: (frameIdx: number, layerId: string, dataUrl: string, snapshotPrev?: string) => void;
 
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
 
-  // playback
   play: () => void;
   pause: () => void;
 
-  // project lifecycle
   newProject: (w?: number, h?: number) => void;
   loadProject: (p: Project) => void;
 
-  // persistence
   loadFromLocalStorage: () => void;
   saveToLocalStorage: () => void;
 }
 
+const pushHistory = (
+  history: Record<string, string[]>,
+  layerId: string,
+  snapshot: string,
+) => {
+  const next = { ...history };
+  next[layerId] = [...(next[layerId] || []), snapshot].slice(-50);
+  return next;
+};
+
 export const useStore = create<AppState>((set, get) => ({
   project: defaultProject(),
   currentFrame: 0,
-  tool: {
-    tool: "brush",
-    color: "#1f2937",
-    size: 6,
-    opacity: 1,
-    mirror: false,
-    pressure: true,
-  },
-  onion: { enabled: true, prev: 1, next: 1, opacity: 0.3 },
+  tool: { tool: "pencil", color: "#1f2937", size: 6, opacity: 1 },
+  onion: { enabled: true },
   isPlaying: false,
   history: {},
   future: {},
@@ -94,7 +114,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   addFrame: () =>
     set((s) => {
-      const blank = makeFrame(s.project.width, s.project.height, s.project.bgColor);
+      const blank = makeFrame(s.project.width, s.project.height);
       const frames = [...s.project.frames];
       frames.splice(s.currentFrame + 1, 0, blank);
       return {
@@ -108,7 +128,14 @@ export const useStore = create<AppState>((set, get) => ({
       const idx = i ?? s.currentFrame;
       const src = s.project.frames[idx];
       if (!src) return {};
-      const dup: Frame = { ...src, id: uid() };
+      const dup: Frame = {
+        ...src,
+        id: uid(),
+        layers: src.layers.map((l) => ({ ...l, id: uid() })),
+      };
+      // Re-map active layer id to the duplicated equivalent
+      const srcActiveIdx = src.layers.findIndex((l) => l.id === src.activeLayerId);
+      dup.activeLayerId = dup.layers[Math.max(0, srcActiveIdx)].id;
       const frames = [...s.project.frames];
       frames.splice(idx + 1, 0, dup);
       return {
@@ -141,23 +168,6 @@ export const useStore = create<AppState>((set, get) => ({
       return { project: { ...s.project, frames, updatedAt: Date.now() }, currentFrame: cur };
     }),
 
-  updateFrameData: (i, dataUrl, snapshotPrev) =>
-    set((s) => {
-      const frame = s.project.frames[i];
-      if (!frame) return {};
-      const history = { ...s.history };
-      if (snapshotPrev !== undefined) {
-        history[frame.id] = [...(history[frame.id] || []), snapshotPrev].slice(-50);
-      }
-      const future = { ...s.future, [frame.id]: [] };
-      const frames = s.project.frames.map((f, k) => (k === i ? { ...f, dataUrl } : f));
-      return {
-        project: { ...s.project, frames, updatedAt: Date.now() },
-        history,
-        future,
-      };
-    }),
-
   setFrameHold: (i, hold) =>
     set((s) => ({
       project: {
@@ -167,53 +177,177 @@ export const useStore = create<AppState>((set, get) => ({
       },
     })),
 
+  addLayer: () =>
+    set((s) => {
+      const f = s.project.frames[s.currentFrame];
+      if (!f) return {};
+      const idx = f.layers.findIndex((l) => l.id === f.activeLayerId);
+      const newLayer = makeLayer(`Layer ${f.layers.length + 1}`, s.project.width, s.project.height);
+      const layers = [...f.layers];
+      layers.splice(Math.max(0, idx + 1), 0, newLayer);
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame ? { ...fr, layers, activeLayerId: newLayer.id } : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+    }),
+
+  duplicateLayer: (layerId) =>
+    set((s) => {
+      const f = s.project.frames[s.currentFrame];
+      if (!f) return {};
+      const id = layerId ?? f.activeLayerId;
+      const idx = f.layers.findIndex((l) => l.id === id);
+      if (idx < 0) return {};
+      const src = f.layers[idx];
+      const dup: Layer = { ...src, id: uid(), name: `${src.name} copy` };
+      const layers = [...f.layers];
+      layers.splice(idx + 1, 0, dup);
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame ? { ...fr, layers, activeLayerId: dup.id } : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+    }),
+
+  deleteLayer: (layerId) =>
+    set((s) => {
+      const f = s.project.frames[s.currentFrame];
+      if (!f || f.layers.length <= 1) return {};
+      const id = layerId ?? f.activeLayerId;
+      const idx = f.layers.findIndex((l) => l.id === id);
+      if (idx < 0) return {};
+      const layers = f.layers.filter((l) => l.id !== id);
+      const newActive = layers[Math.min(idx, layers.length - 1)].id;
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame ? { ...fr, layers, activeLayerId: newActive } : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+    }),
+
+  moveLayer: (from, to) =>
+    set((s) => {
+      const f = s.project.frames[s.currentFrame];
+      if (!f) return {};
+      const layers = [...f.layers];
+      if (from < 0 || from >= layers.length || to < 0 || to >= layers.length) return {};
+      const [m] = layers.splice(from, 1);
+      layers.splice(to, 0, m);
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame ? { ...fr, layers } : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+    }),
+
+  renameLayer: (layerId, name) =>
+    set((s) => {
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame
+          ? { ...fr, layers: fr.layers.map((l) => (l.id === layerId ? { ...l, name } : l)) }
+          : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+    }),
+
+  toggleLayerVisible: (layerId) =>
+    set((s) => {
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame
+          ? { ...fr, layers: fr.layers.map((l) => (l.id === layerId ? { ...l, visible: !l.visible } : l)) }
+          : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+    }),
+
+  setActiveLayer: (layerId) =>
+    set((s) => {
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame ? { ...fr, activeLayerId: layerId } : fr,
+      );
+      return { project: { ...s.project, frames } };
+    }),
+
+  updateActiveLayerData: (dataUrl, snapshotPrev) =>
+    set((s) => {
+      const f = s.project.frames[s.currentFrame];
+      if (!f) return {};
+      const id = f.activeLayerId;
+      let history = s.history;
+      if (snapshotPrev !== undefined) history = pushHistory(history, id, snapshotPrev);
+      const future = { ...s.future, [id]: [] };
+      const layers = f.layers.map((l) => (l.id === id ? { ...l, dataUrl } : l));
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame ? { ...fr, layers } : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() }, history, future };
+    }),
+
+  updateLayerData: (frameIdx, layerId, dataUrl, snapshotPrev) =>
+    set((s) => {
+      let history = s.history;
+      if (snapshotPrev !== undefined) history = pushHistory(history, layerId, snapshotPrev);
+      const future = { ...s.future, [layerId]: [] };
+      const frames = s.project.frames.map((fr, k) =>
+        k === frameIdx
+          ? { ...fr, layers: fr.layers.map((l) => (l.id === layerId ? { ...l, dataUrl } : l)) }
+          : fr,
+      );
+      return { project: { ...s.project, frames, updatedAt: Date.now() }, history, future };
+    }),
+
   undo: () =>
     set((s) => {
-      const frame = s.project.frames[s.currentFrame];
-      if (!frame) return {};
-      const stack = s.history[frame.id] || [];
+      const f = s.project.frames[s.currentFrame];
+      if (!f) return {};
+      const id = f.activeLayerId;
+      const stack = s.history[id] || [];
       if (!stack.length) return {};
       const prev = stack[stack.length - 1];
       const newStack = stack.slice(0, -1);
-      const fut = [...(s.future[frame.id] || []), frame.dataUrl].slice(-50);
-      const frames = s.project.frames.map((f, k) =>
-        k === s.currentFrame ? { ...f, dataUrl: prev } : f,
+      const layer = f.layers.find((l) => l.id === id);
+      const fut = [...(s.future[id] || []), layer?.dataUrl ?? ""].slice(-50);
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame
+          ? { ...fr, layers: fr.layers.map((l) => (l.id === id ? { ...l, dataUrl: prev } : l)) }
+          : fr,
       );
       return {
         project: { ...s.project, frames, updatedAt: Date.now() },
-        history: { ...s.history, [frame.id]: newStack },
-        future: { ...s.future, [frame.id]: fut },
+        history: { ...s.history, [id]: newStack },
+        future: { ...s.future, [id]: fut },
       };
     }),
 
   redo: () =>
     set((s) => {
-      const frame = s.project.frames[s.currentFrame];
-      if (!frame) return {};
-      const stack = s.future[frame.id] || [];
+      const f = s.project.frames[s.currentFrame];
+      if (!f) return {};
+      const id = f.activeLayerId;
+      const stack = s.future[id] || [];
       if (!stack.length) return {};
       const next = stack[stack.length - 1];
       const newStack = stack.slice(0, -1);
-      const hist = [...(s.history[frame.id] || []), frame.dataUrl].slice(-50);
-      const frames = s.project.frames.map((f, k) =>
-        k === s.currentFrame ? { ...f, dataUrl: next } : f,
+      const layer = f.layers.find((l) => l.id === id);
+      const hist = [...(s.history[id] || []), layer?.dataUrl ?? ""].slice(-50);
+      const frames = s.project.frames.map((fr, k) =>
+        k === s.currentFrame
+          ? { ...fr, layers: fr.layers.map((l) => (l.id === id ? { ...l, dataUrl: next } : l)) }
+          : fr,
       );
       return {
         project: { ...s.project, frames, updatedAt: Date.now() },
-        future: { ...s.future, [frame.id]: newStack },
-        history: { ...s.history, [frame.id]: hist },
+        future: { ...s.future, [id]: newStack },
+        history: { ...s.history, [id]: hist },
       };
     }),
 
   canUndo: () => {
     const s = get();
     const f = s.project.frames[s.currentFrame];
-    return !!f && (s.history[f.id]?.length ?? 0) > 0;
+    return !!f && (s.history[f.activeLayerId]?.length ?? 0) > 0;
   },
   canRedo: () => {
     const s = get();
     const f = s.project.frames[s.currentFrame];
-    return !!f && (s.future[f.id]?.length ?? 0) > 0;
+    return !!f && (s.future[f.activeLayerId]?.length ?? 0) > 0;
   },
 
   play: () => set({ isPlaying: true }),
@@ -224,7 +358,7 @@ export const useStore = create<AppState>((set, get) => ({
       const p = defaultProject();
       p.width = w;
       p.height = h;
-      p.frames = [makeFrame(w, h, p.bgColor)];
+      p.frames = [makeFrame(w, h)];
       return { project: p, currentFrame: 0, history: {}, future: {}, isPlaying: false };
     }),
 
@@ -236,7 +370,7 @@ export const useStore = create<AppState>((set, get) => ({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const p = JSON.parse(raw) as Project;
-      if (p && p.frames && p.frames.length) {
+      if (p && p.frames && p.frames.length && p.frames[0].layers) {
         set({ project: p, currentFrame: 0, history: {}, future: {} });
       }
     } catch {
