@@ -4,6 +4,8 @@ import { ToolOptions } from "@/components/editor/ToolOptions";
 import { OnionPanel } from "@/components/editor/OnionPanel";
 import { Timeline } from "@/components/editor/Timeline";
 import { DrawingCanvas } from "@/components/editor/DrawingCanvas";
+import { LayersPanel } from "@/components/editor/LayersPanel";
+import { PreviewPanel } from "@/components/editor/PreviewPanel";
 import { useAutosave, useShortcuts, useTheme } from "@/animation/hooks";
 
 const Index = () => {
@@ -31,8 +33,7 @@ const Index = () => {
             <OnionPanel />
           </section>
           <p className="text-[11px] text-muted-foreground leading-relaxed px-1">
-            Tip: hold <kbd className="font-mono bg-muted px-1 rounded">Ctrl</kbd> + scroll to zoom.
-            Press <kbd className="font-mono bg-muted px-1 rounded">?</kbd> in the top bar for all shortcuts.
+            Tip: scroll to zoom, hold <kbd className="font-mono bg-muted px-1 rounded">Shift</kbd> + drag to pan.
           </p>
         </aside>
 
@@ -43,6 +44,16 @@ const Index = () => {
             <Timeline />
           </div>
         </section>
+
+        {/* Right preview + layers panel */}
+        <aside className="w-[280px] shrink-0 border-l border-border bg-card/50 backdrop-blur p-3 overflow-y-auto scrollbar-thin space-y-4">
+          <section className="panel p-3">
+            <PreviewPanel />
+          </section>
+          <section className="panel p-3">
+            <LayersPanel />
+          </section>
+        </aside>
       </main>
 
       <footer className="h-8 shrink-0 border-t border-border bg-card/60 backdrop-blur px-4 flex items-center justify-between text-[11px] text-muted-foreground">

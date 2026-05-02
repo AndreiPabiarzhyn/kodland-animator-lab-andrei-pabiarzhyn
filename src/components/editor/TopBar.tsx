@@ -21,7 +21,7 @@ import { useStore } from "@/animation/store";
 import { exportGif, exportPngSequence, importImageAsFrame, loadProjectFile, saveProjectFile } from "@/animation/io";
 import {
   Download, Upload, FilePlus2, Save, Image as ImageIcon, Moon, Sun,
-  Undo2, Redo2, ZoomIn, FileDown, Settings, HelpCircle, Sparkles,
+  Undo2, Redo2, FileDown, HelpCircle, Sparkles,
 } from "lucide-react";
 import { toggleTheme } from "@/animation/hooks";
 import { toast } from "sonner";
@@ -35,8 +35,7 @@ export const TopBar = () => {
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
   const addFrame = useStore((s) => s.addFrame);
-  const updateFrameData = useStore((s) => s.updateFrameData);
-  const currentFrame = useStore((s) => s.currentFrame);
+  const updateActiveLayerData = useStore((s) => s.updateActiveLayerData);
 
   const importRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef<HTMLInputElement>(null);
@@ -92,9 +91,7 @@ export const TopBar = () => {
     if (!f) return;
     try {
       const dataUrl = await importImageAsFrame(f);
-      // Add new frame using project canvas dimensions, scaled-fit
       addFrame();
-      // Wait for state, then redraw onto new frame
       requestAnimationFrame(async () => {
         const cv = document.createElement("canvas");
         cv.width = project.width;
@@ -106,8 +103,7 @@ export const TopBar = () => {
           const w = img.width * scale;
           const h = img.height * scale;
           ctx.drawImage(img, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
-          const idx = useStore.getState().currentFrame;
-          updateFrameData(idx, cv.toDataURL("image/png"));
+          updateActiveLayerData(cv.toDataURL("image/png"));
           toast.success("Image imported as frame");
         };
         img.src = dataUrl;
@@ -241,12 +237,12 @@ export const TopBar = () => {
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2 text-sm">
             {[
-              ["B", "Brush"], ["P", "Pencil"], ["E", "Eraser"], ["G", "Fill"],
-              ["L", "Line"], ["R", "Rectangle"], ["O", "Ellipse"], ["I", "Eyedropper"],
-              ["H", "Pan"], ["M", "Toggle mirror"],
-              ["[ / ]", "Brush size"], ["N", "New frame"], ["D", "Duplicate frame"],
+              ["P", "Pencil"], ["E", "Eraser"], ["G", "Fill"],
+              ["S", "Select / Transform"], ["I", "Color picker"],
+              ["[ / ]", "Tool size"], ["N", "New frame"], ["D", "Duplicate frame"],
               ["Space", "Play / Pause"], ["← / →", "Prev/Next frame"],
-              ["Ctrl+Z", "Undo"], ["Ctrl+Shift+Z", "Redo"], ["Ctrl + Scroll", "Zoom"],
+              ["Ctrl+Z", "Undo"], ["Ctrl+Shift+Z", "Redo"], ["Scroll", "Zoom"],
+              ["Shift+Drag", "Pan canvas"], ["Enter / Esc", "Apply / Cancel selection"],
             ].map(([k, v]) => (
               <div key={k} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5">
                 <span className="text-muted-foreground">{v}</span>
