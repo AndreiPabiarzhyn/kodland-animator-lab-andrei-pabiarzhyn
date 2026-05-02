@@ -2,15 +2,11 @@ import { useEffect } from "react";
 import { useStore } from "@/animation/store";
 
 const TOOL_KEYS: Record<string, string> = {
-  b: "brush",
   p: "pencil",
   e: "eraser",
   g: "fill",
-  l: "line",
-  r: "rect",
-  o: "ellipse",
+  s: "select",
   i: "eyedropper",
-  h: "pan",
 };
 
 export const useShortcuts = () => {
@@ -31,8 +27,7 @@ export const useShortcuts = () => {
       if (k === "n" && !meta) { e.preventDefault(); s.addFrame(); return; }
       if (k === "d" && !meta) { e.preventDefault(); s.duplicateFrame(); return; }
       if (k === "[") { e.preventDefault(); s.setTool({ size: Math.max(1, s.tool.size - 1) }); return; }
-      if (k === "]") { e.preventDefault(); s.setTool({ size: Math.min(80, s.tool.size + 1) }); return; }
-      if (k === "m") { e.preventDefault(); s.setTool({ mirror: !s.tool.mirror }); return; }
+      if (k === "]") { e.preventDefault(); s.setTool({ size: Math.min(120, s.tool.size + 1) }); return; }
 
       if (TOOL_KEYS[k] && !meta) {
         e.preventDefault();
