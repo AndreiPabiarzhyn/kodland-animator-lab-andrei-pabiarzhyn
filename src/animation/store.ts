@@ -98,7 +98,7 @@ const pushHistory = (
 export const useStore = create<AppState>((set, get) => ({
   project: defaultProject(),
   currentFrame: 0,
-  tool: { tool: "pencil", color: "#1f2937", size: 6, opacity: 1 },
+  tool: { tool: "pencil", color: "#1f2937", size: 6, opacity: 1, mirrorAxis: "horizontal", shapeFill: false },
   onion: { enabled: true },
   isPlaying: false,
   history: {},
