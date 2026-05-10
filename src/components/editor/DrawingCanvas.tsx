@@ -214,11 +214,6 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
-  useEffect(() => {
-    if (!drawingRef.current.active && dragRef.current.kind !== "shape") return;
-    commitLiveStroke();
-  }, [tool.tool, commitLiveStroke]);
-
   // Auto-cancel any active selection when the active layer / frame changes,
   // otherwise the floating pixels would leak into the wrong layer.
   const activeLayerId = frame?.activeLayerId ?? null;
@@ -428,6 +423,11 @@ export const DrawingCanvas = ({ className }: Props) => {
     drawingRef.current.active = false;
     if (live) live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
   }, []);
+
+  useEffect(() => {
+    if (!drawingRef.current.active && dragRef.current.kind !== "shape") return;
+    commitLiveStroke();
+  }, [tool.tool, commitLiveStroke]);
 
   // Draw the active layer (fast path) into a temp canvas — used during pencil stroke
   const drawActiveLayerToContext = async (ctx: CanvasRenderingContext2D) => {
