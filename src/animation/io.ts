@@ -4,7 +4,7 @@ import { saveAs } from "file-saver";
 import { Frame, Project } from "./types";
 import { downloadBlob, loadImage } from "./utils";
 
-const GIF_WORKER_URL = "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js";
+const GIF_WORKER_URL = "/gif.worker.js";
 
 /** Composite all visible layers of a frame into a fresh canvas (transparent). */
 const compositeFrame = async (frame: Frame, w: number, h: number): Promise<HTMLCanvasElement> => {
