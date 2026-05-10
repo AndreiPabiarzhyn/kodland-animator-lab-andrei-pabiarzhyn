@@ -7,6 +7,10 @@ const TOOL_KEYS: Record<string, string> = {
   g: "fill",
   s: "select",
   i: "eyedropper",
+  m: "mirror",
+  r: "rectangle",
+  c: "circle",
+  l: "line",
 };
 
 export const useShortcuts = () => {

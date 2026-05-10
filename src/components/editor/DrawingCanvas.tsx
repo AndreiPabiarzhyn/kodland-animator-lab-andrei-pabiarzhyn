@@ -21,7 +21,8 @@ type DragMode =
   | { kind: "marquee"; x0: number; y0: number }
   | { kind: "move"; ox: number; oy: number; cx0: number; cy0: number }
   | { kind: "resize"; handle: string; ox: number; oy: number; w0: number; h0: number; cx0: number; cy0: number }
-  | { kind: "rotate"; ox: number; oy: number; rot0: number; cx: number; cy: number };
+  | { kind: "rotate"; ox: number; oy: number; rot0: number; cx: number; cy: number }
+  | { kind: "shape"; shape: "rectangle" | "circle" | "line"; x0: number; y0: number };
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 16;
@@ -51,7 +52,8 @@ export const DrawingCanvas = ({ className }: Props) => {
     active: boolean;
     last: { x: number; y: number; pressure: number } | null;
     startSnapshot: string | null;
-  }>({ active: false, last: null, startSnapshot: null });
+    layerId: string | null;
+  }>({ active: false, last: null, startSnapshot: null, layerId: null });
   /** When drawing, base canvas excludes this layer id so live canvas owns it */
   const drawingLayerIdRef = useRef<string | null>(null);
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
@@ -211,6 +213,19 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
+  // Auto-cancel any active selection when the active layer / frame changes,
+  // otherwise the floating pixels would leak into the wrong layer.
+  const activeLayerId = frame?.activeLayerId ?? null;
+  useEffect(() => {
+    setSelection(null);
+    dragRef.current = { kind: "none" };
+    drawingRef.current.active = false;
+    drawingLayerIdRef.current = null;
+    const live = liveRef.current;
+    if (live) live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayerId, currentFrame]);
+
   // Apply selection's transformed pixels back to active layer + clear selection
   const commitSelection = useCallback(async () => {
     if (!selection || !activeLayer) return;
@@ -306,6 +321,101 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.stroke();
   };
 
+  /** Draw stroke segment + mirrored copies for Mirror Pen */
+  const drawMirroredSegment = (
+    ctx: CanvasRenderingContext2D,
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ) => {
+    const w = project.width;
+    const h = project.height;
+    const axis = tool.mirrorAxis;
+    drawStrokeSegment(ctx, a, b, false);
+    if (axis === "horizontal" || axis === "both") {
+      drawStrokeSegment(ctx, { x: w - a.x, y: a.y }, { x: w - b.x, y: b.y }, false);
+    }
+    if (axis === "vertical" || axis === "both") {
+      drawStrokeSegment(ctx, { x: a.x, y: h - a.y }, { x: b.x, y: h - b.y }, false);
+    }
+    if (axis === "both") {
+      drawStrokeSegment(ctx, { x: w - a.x, y: h - a.y }, { x: w - b.x, y: h - b.y }, false);
+    }
+  };
+
+  /** Render a shape preview onto live ctx (clears first) */
+  const renderShape = (
+    ctx: CanvasRenderingContext2D,
+    shape: "rectangle" | "circle" | "line",
+    x0: number, y0: number, x1: number, y1: number,
+  ) => {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = tool.size;
+    ctx.strokeStyle = hexToRgba(tool.color, tool.opacity);
+    ctx.fillStyle = hexToRgba(tool.color, tool.opacity);
+    if (shape === "line") {
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    } else if (shape === "rectangle") {
+      const x = Math.min(x0, x1), y = Math.min(y0, y1);
+      const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+      if (tool.shapeFill) ctx.fillRect(x, y, w, h);
+      else ctx.strokeRect(x, y, w, h);
+    } else {
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      if (tool.shapeFill) ctx.fill();
+      else ctx.stroke();
+    }
+  };
+
+  /** Begin a draw-into-live workflow: composite all OTHER visible layers into base
+   * and render the active layer into live so we can paint directly into it. */
+  const beginLiveStroke = async () => {
+    if (!activeLayer || !frame) return;
+    drawingRef.current.startSnapshot = activeLayer.dataUrl;
+    drawingRef.current.layerId = activeLayer.id;
+    drawingLayerIdRef.current = activeLayer.id;
+    const base = baseRef.current!;
+    const bctx = base.getContext("2d")!;
+    bctx.clearRect(0, 0, base.width, base.height);
+    for (const layer of frame.layers) {
+      if (!layer.visible) continue;
+      if (layer.id === activeLayer.id) continue;
+      try {
+        const img = await loadImage(layer.dataUrl);
+        bctx.drawImage(img, 0, 0);
+      } catch { /* ignore */ }
+    }
+    const live = liveRef.current!;
+    const lctx = live.getContext("2d")!;
+    lctx.clearRect(0, 0, live.width, live.height);
+    await drawActiveLayerToContext(lctx);
+  };
+
+  /** Commit live canvas into the layer that started the stroke (not whatever is
+   * active right now), so layer switches mid-stroke don't corrupt data. */
+  const commitLiveStroke = () => {
+    const live = liveRef.current!;
+    const layerId = drawingRef.current.layerId;
+    const snap = drawingRef.current.startSnapshot ?? undefined;
+    if (layerId) {
+      const s = useStore.getState();
+      const idx = s.project.frames.findIndex((f) => f.id === frame!.id);
+      s.updateLayerData(idx, layerId, live.toDataURL("image/png"), snap);
+    }
+    drawingLayerIdRef.current = null;
+    drawingRef.current.layerId = null;
+    drawingRef.current.startSnapshot = null;
+    live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
+  };
+
   // Draw the active layer (fast path) into a temp canvas — used during pencil stroke
   const drawActiveLayerToContext = async (ctx: CanvasRenderingContext2D) => {
     if (!activeLayer) return;
@@ -384,32 +494,21 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
 
-    // Pencil / Eraser — draw into a layer-sized canvas live, commit on up
-    drawingRef.current.active = true;
-    drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
-    drawingRef.current.startSnapshot = activeLayer.dataUrl;
-    drawingLayerIdRef.current = activeLayer.id;
-    // Force base recomposite (excluding active layer) by re-rendering it now
-    {
-      const base = baseRef.current!;
-      const bctx = base.getContext("2d")!;
-      bctx.clearRect(0, 0, base.width, base.height);
-      for (const layer of frame.layers) {
-        if (!layer.visible) continue;
-        if (layer.id === activeLayer.id) continue;
-        try {
-          const img = await loadImage(layer.dataUrl);
-          bctx.drawImage(img, 0, 0);
-        } catch { /* ignore */ }
-      }
+    // Shape tools (rectangle / circle / line)
+    if (tool.tool === "rectangle" || tool.tool === "circle" || tool.tool === "line") {
+      await beginLiveStroke();
+      dragRef.current = { kind: "shape", shape: tool.tool, x0: p.x, y0: p.y };
+      return;
     }
 
-    // Render active layer into liveRef so we can edit only it directly
+    // Pencil / Eraser / Mirror Pen — draw into live canvas, commit on up
+    drawingRef.current.active = true;
+    drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
+    await beginLiveStroke();
     const live = liveRef.current!;
     const lctx = live.getContext("2d")!;
-    lctx.clearRect(0, 0, live.width, live.height);
-    await drawActiveLayerToContext(lctx);
-    drawStrokeSegment(lctx, p, p, tool.tool === "eraser");
+    if (tool.tool === "mirror") drawMirroredSegment(lctx, p, p);
+    else drawStrokeSegment(lctx, p, p, tool.tool === "eraser");
   };
 
   const onPointerMove = async (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -472,12 +571,31 @@ export const DrawingCanvas = ({ className }: Props) => {
     }
 
     // Drawing
+    if (dr.kind === "shape") {
+      // Re-render: active layer + shape preview on top
+      const live = liveRef.current!;
+      const lctx = live.getContext("2d")!;
+      lctx.clearRect(0, 0, live.width, live.height);
+      // restore original active-layer pixels then overlay shape
+      // (we redraw from snapshot to avoid accumulating partial shapes)
+      if (drawingRef.current.startSnapshot) {
+        try {
+          const img = await loadImage(drawingRef.current.startSnapshot);
+          lctx.drawImage(img, 0, 0);
+        } catch { /* ignore */ }
+      }
+      renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
+      return;
+    }
     if (!drawingRef.current.active) return;
     const live = liveRef.current!;
     const lctx = live.getContext("2d")!;
     const last = drawingRef.current.last!;
     if (tool.tool === "pencil" || tool.tool === "eraser") {
       drawStrokeSegment(lctx, last, p, tool.tool === "eraser");
+      drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
+    } else if (tool.tool === "mirror") {
+      drawMirroredSegment(lctx, last, p);
       drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     }
   };
@@ -491,6 +609,26 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     const dr = dragRef.current;
     dragRef.current = { kind: "none" };
+
+    if (dr.kind === "shape") {
+      // Note: renderShape was called in pointermove with snapshot baseline —
+      // the live canvas now contains "snapshot + shape". Commit it.
+      // If the user just clicked without dragging, render a single-point shape.
+      const p = getCanvasPoint(e.clientX, e.clientY);
+      if (drawingRef.current.startSnapshot) {
+        const live = liveRef.current!;
+        const lctx = live.getContext("2d")!;
+        // ensure at least one render happened
+        lctx.clearRect(0, 0, live.width, live.height);
+        try {
+          const img = await loadImage(drawingRef.current.startSnapshot);
+          lctx.drawImage(img, 0, 0);
+        } catch { /* ignore */ }
+        renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
+      }
+      commitLiveStroke();
+      return;
+    }
 
     if (dr.kind === "marquee") {
       const p = getCanvasPoint(e.clientX, e.clientY);
@@ -530,11 +668,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     // Drawing commit (pencil / eraser)
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
-    const live = liveRef.current!;
-    updateActiveLayerData(live.toDataURL("image/png"), drawingRef.current.startSnapshot ?? undefined);
-    drawingLayerIdRef.current = null;
-    // Clear live (the composited base will redraw from store)
-    live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
+    commitLiveStroke();
   };
 
   // Smooth, cursor-centered zoom
@@ -563,12 +697,13 @@ export const DrawingCanvas = ({ className }: Props) => {
   const cursorCss = tool.size * view.scale;
   const showRing =
     cursorPos !== null &&
-    (tool.tool === "pencil" || tool.tool === "eraser");
+    (tool.tool === "pencil" || tool.tool === "eraser" || tool.tool === "mirror");
 
   const cursorStyle =
     tool.tool === "select" ? "default"
     : tool.tool === "eyedropper" ? "crosshair"
     : tool.tool === "fill" ? "cell"
+    : tool.tool === "rectangle" || tool.tool === "circle" || tool.tool === "line" ? "crosshair"
     : "none";
 
   return (

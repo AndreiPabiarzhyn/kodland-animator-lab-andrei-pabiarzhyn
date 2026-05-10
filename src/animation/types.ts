@@ -3,7 +3,11 @@ export type ToolId =
   | "eraser"
   | "fill"
   | "select"
-  | "eyedropper";
+  | "eyedropper"
+  | "mirror"
+  | "rectangle"
+  | "circle"
+  | "line";
 
 export interface Layer {
   id: string;
@@ -26,6 +30,8 @@ export interface ToolSettings {
   color: string;
   size: number;
   opacity: number; // 0..1
+  mirrorAxis: "horizontal" | "vertical" | "both";
+  shapeFill: boolean;
 }
 
 export interface OnionSettings {
@@ -50,6 +56,8 @@ export const DEFAULT_PALETTE = [
   "#000000", "#ffffff", "#ef4f6b", "#ff8a3d", "#ffd23f", "#7ed957",
   "#3da9fc", "#7b5cff", "#ff6fb5", "#8b5a2b", "#9aa0a6", "#1f2937",
 ];
+
+export const BRUSH_PRESETS = [2, 6, 12, 24, 48, 80];
 
 export const ONION_OPACITY = 0.35;
 export const ONION_TINT = "#ef4f6b";

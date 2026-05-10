@@ -25,22 +25,35 @@ export const exportGif = async (
   project: Project,
   onProgress?: (p: number) => void,
 ): Promise<void> => {
-  return new Promise(async (resolve, reject) => {
+  // Pre-composite every frame onto an opaque white background so GIF (which has
+  // no real alpha) doesn't produce black/garbled frames.
+  const W = project.width;
+  const H = project.height;
+  const composited: HTMLCanvasElement[] = [];
+  for (const f of project.frames) {
+    const layer = await compositeFrame(f, W, H);
+    const flat = document.createElement("canvas");
+    flat.width = W; flat.height = H;
+    const fctx = flat.getContext("2d")!;
+    fctx.fillStyle = "#ffffff";
+    fctx.fillRect(0, 0, W, H);
+    fctx.drawImage(layer, 0, 0);
+    composited.push(flat);
+  }
+
+  return new Promise((resolve, reject) => {
     try {
       const gif = new GIF({
         workers: 2,
-        quality: 8,
-        width: project.width,
-        height: project.height,
+        quality: 10,
+        width: W,
+        height: H,
         workerScript: GIF_WORKER_URL,
-        transparent: 0x00000000,
       });
-
-      const interval = Math.round(1000 / project.fps);
-      for (const f of project.frames) {
-        const cv = await compositeFrame(f, project.width, project.height);
-        gif.addFrame(cv, { copy: true, delay: interval * f.hold });
-      }
+      const interval = Math.max(20, Math.round(1000 / Math.max(1, project.fps)));
+      project.frames.forEach((f, i) => {
+        gif.addFrame(composited[i], { copy: true, delay: interval * Math.max(1, f.hold) });
+      });
       gif.on("progress", (p: number) => onProgress?.(p));
       gif.on("finished", (blob: Blob) => {
         downloadBlob(blob, `${project.name || "animation"}.gif`);

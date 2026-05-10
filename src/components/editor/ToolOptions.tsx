@@ -1,5 +1,5 @@
 import { useStore } from "@/animation/store";
-import { DEFAULT_PALETTE } from "@/animation/types";
+import { DEFAULT_PALETTE, BRUSH_PRESETS } from "@/animation/types";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,34 @@ export const ToolOptions = () => {
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Size</Label>
           <span className="text-sm font-semibold tabular-nums">{tool.size}px</span>
         </div>
+        <div className="flex items-end justify-between gap-1 mb-3 px-1">
+          {BRUSH_PRESETS.map((s) => {
+            const active = tool.size === s;
+            const visual = Math.max(4, Math.min(28, s / 3 + 4));
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setTool({ size: s })}
+                aria-label={`Brush size ${s}px`}
+                className={cn(
+                  "h-9 w-9 rounded-lg flex items-center justify-center transition-all",
+                  active
+                    ? "bg-gradient-primary shadow-pop scale-105"
+                    : "bg-secondary hover:bg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "block rounded-full",
+                    active ? "bg-primary-foreground" : "bg-foreground/70",
+                  )}
+                  style={{ width: visual, height: visual }}
+                />
+              </button>
+            );
+          })}
+        </div>
         <Slider
           value={[tool.size]}
           min={1}
@@ -69,6 +97,67 @@ export const ToolOptions = () => {
           onValueChange={(v) => setTool({ opacity: v[0] / 100 })}
         />
       </div>
+
+      {/* Mirror axis (Mirror Pen only) */}
+      {tool.tool === "mirror" && (
+        <div>
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Mirror Axis
+          </Label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["horizontal", "vertical", "both"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setTool({ mirrorAxis: a })}
+                className={cn(
+                  "h-8 rounded-lg text-xs font-bold capitalize transition-all",
+                  tool.mirrorAxis === a
+                    ? "bg-gradient-primary text-primary-foreground shadow-pop"
+                    : "bg-secondary hover:bg-muted",
+                )}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Shape fill (Rectangle / Circle) */}
+      {(tool.tool === "rectangle" || tool.tool === "circle") && (
+        <div>
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Style
+          </Label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setTool({ shapeFill: false })}
+              className={cn(
+                "h-8 rounded-lg text-xs font-bold transition-all",
+                !tool.shapeFill
+                  ? "bg-gradient-primary text-primary-foreground shadow-pop"
+                  : "bg-secondary hover:bg-muted",
+              )}
+            >
+              Outline
+            </button>
+            <button
+              type="button"
+              onClick={() => setTool({ shapeFill: true })}
+              className={cn(
+                "h-8 rounded-lg text-xs font-bold transition-all",
+                tool.shapeFill
+                  ? "bg-gradient-primary text-primary-foreground shadow-pop"
+                  : "bg-secondary hover:bg-muted",
+              )}
+            >
+              Fill
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { Eraser, PaintBucket, Pipette, Pencil, BoxSelect } from "lucide-react";
+import { Eraser, PaintBucket, Pipette, Pencil, BoxSelect, FlipHorizontal, Square, Circle, Minus } from "lucide-react";
 import { ToolId } from "@/animation/types";
 import { useStore } from "@/animation/store";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,6 +8,10 @@ const TOOLS: Array<{ id: ToolId; label: string; key: string; icon: React.Compone
   { id: "pencil", label: "Pencil", key: "P", icon: Pencil },
   { id: "eraser", label: "Eraser", key: "E", icon: Eraser },
   { id: "fill", label: "Fill", key: "G", icon: PaintBucket },
+  { id: "mirror", label: "Mirror Pen", key: "M", icon: FlipHorizontal },
+  { id: "rectangle", label: "Rectangle", key: "R", icon: Square },
+  { id: "circle", label: "Ellipse", key: "C", icon: Circle },
+  { id: "line", label: "Line", key: "L", icon: Minus },
   { id: "select", label: "Select / Transform", key: "S", icon: BoxSelect },
   { id: "eyedropper", label: "Color Picker", key: "I", icon: Pipette },
 ];
