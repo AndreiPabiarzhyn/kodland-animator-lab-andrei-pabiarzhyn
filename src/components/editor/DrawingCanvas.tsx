@@ -53,7 +53,8 @@ export const DrawingCanvas = ({ className }: Props) => {
     last: { x: number; y: number; pressure: number } | null;
     startSnapshot: string | null;
     layerId: string | null;
-  }>({ active: false, last: null, startSnapshot: null, layerId: null });
+    frameId: string | null;
+  }>({ active: false, last: null, startSnapshot: null, layerId: null, frameId: null });
   /** When drawing, base canvas excludes this layer id so live canvas owns it */
   const drawingLayerIdRef = useRef<string | null>(null);
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
@@ -348,7 +349,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     shape: "rectangle" | "circle" | "line",
     x0: number, y0: number, x1: number, y1: number,
   ) => {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.save();
     ctx.globalCompositeOperation = "source-over";
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -373,6 +374,7 @@ export const DrawingCanvas = ({ className }: Props) => {
       if (tool.shapeFill) ctx.fill();
       else ctx.stroke();
     }
+    ctx.restore();
   };
 
   /** Begin a draw-into-live workflow: composite all OTHER visible layers into base
@@ -381,6 +383,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     if (!activeLayer || !frame) return;
     drawingRef.current.startSnapshot = activeLayer.dataUrl;
     drawingRef.current.layerId = activeLayer.id;
+    drawingRef.current.frameId = frame.id;
     drawingLayerIdRef.current = activeLayer.id;
     const base = baseRef.current!;
     const bctx = base.getContext("2d")!;
@@ -401,20 +404,24 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   /** Commit live canvas into the layer that started the stroke (not whatever is
    * active right now), so layer switches mid-stroke don't corrupt data. */
-  const commitLiveStroke = () => {
-    const live = liveRef.current!;
+  const commitLiveStroke = useCallback(() => {
+    const live = liveRef.current;
     const layerId = drawingRef.current.layerId;
+    const frameId = drawingRef.current.frameId;
     const snap = drawingRef.current.startSnapshot ?? undefined;
-    if (layerId) {
+    if (live && layerId && frameId) {
       const s = useStore.getState();
-      const idx = s.project.frames.findIndex((f) => f.id === frame!.id);
+      const idx = s.project.frames.findIndex((f) => f.id === frameId);
       s.updateLayerData(idx, layerId, live.toDataURL("image/png"), snap);
     }
     drawingLayerIdRef.current = null;
     drawingRef.current.layerId = null;
+    drawingRef.current.frameId = null;
     drawingRef.current.startSnapshot = null;
-    live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
-  };
+    drawingRef.current.last = null;
+    drawingRef.current.active = false;
+    if (live) live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
+  }, []);
 
   // Draw the active layer (fast path) into a temp canvas — used during pencil stroke
   const drawActiveLayerToContext = async (ctx: CanvasRenderingContext2D) => {
