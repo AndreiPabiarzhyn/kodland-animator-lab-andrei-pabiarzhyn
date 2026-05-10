@@ -214,10 +214,16 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
+  useEffect(() => {
+    if (!drawingRef.current.active && dragRef.current.kind !== "shape") return;
+    commitLiveStroke();
+  }, [tool.tool, commitLiveStroke]);
+
   // Auto-cancel any active selection when the active layer / frame changes,
   // otherwise the floating pixels would leak into the wrong layer.
   const activeLayerId = frame?.activeLayerId ?? null;
   useEffect(() => {
+    if (drawingRef.current.active || dragRef.current.kind === "shape") commitLiveStroke();
     setSelection(null);
     dragRef.current = { kind: "none" };
     drawingRef.current.active = false;
