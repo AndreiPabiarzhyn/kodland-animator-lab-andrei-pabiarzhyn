@@ -57,6 +57,15 @@ export const DrawingCanvas = ({ className }: Props) => {
   }>({ active: false, last: null, startSnapshot: null, layerId: null, frameId: null });
   /** When drawing, base canvas excludes this layer id so live canvas owns it */
   const drawingLayerIdRef = useRef<string | null>(null);
+  /** Synchronous cache of active layer pixels + "others" composite,
+   *  rebuilt asynchronously when frame/layers change. Used by shape preview
+   *  and stroke begin so the canvas never flickers waiting for image decode. */
+  const cacheRef = useRef<{
+    frameId: string | null;
+    activeId: string | null;
+    active: HTMLCanvasElement | null;
+    others: HTMLCanvasElement | null;
+  }>({ frameId: null, activeId: null, active: null, others: null });
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
     active: false, startX: 0, startY: 0, tx0: 0, ty0: 0,
   });
@@ -213,6 +222,42 @@ export const DrawingCanvas = ({ className }: Props) => {
   }, [selection, view.scale]);
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
+
+  // Build/refresh synchronous offscreen cache (active layer + others composite)
+  // whenever the frame, its layers, or the active layer changes.
+  useEffect(() => {
+    if (!frame) return;
+    let cancelled = false;
+    (async () => {
+      const W = project.width, H = project.height;
+      const active = document.createElement("canvas");
+      active.width = W; active.height = H;
+      const others = document.createElement("canvas");
+      others.width = W; others.height = H;
+      const actx = active.getContext("2d")!;
+      const octx = others.getContext("2d")!;
+      for (const layer of frame.layers) {
+        if (!layer.visible) continue;
+        try {
+          const img = await loadImage(layer.dataUrl);
+          if (cancelled) return;
+          if (layer.id === frame.activeLayerId) {
+            actx.drawImage(img, 0, 0);
+          } else {
+            octx.drawImage(img, 0, 0);
+          }
+        } catch { /* ignore */ }
+      }
+      if (cancelled) return;
+      cacheRef.current = {
+        frameId: frame.id,
+        activeId: frame.activeLayerId,
+        active,
+        others,
+      };
+    })();
+    return () => { cancelled = true; };
+  }, [frame, project.width, project.height]);
 
   // Auto-cancel any active selection when the active layer / frame changes,
   // otherwise the floating pixels would leak into the wrong layer.
@@ -378,16 +423,33 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.restore();
   };
 
-  /** Begin a draw-into-live workflow: composite all OTHER visible layers into base
-   * and render the active layer into live so we can paint directly into it. */
+  /** Begin a draw-into-live workflow synchronously using the offscreen cache.
+   *  Prevents flicker by avoiding async image decode at the start of a stroke. */
   const beginLiveStroke = async () => {
     if (!activeLayer || !frame) return;
     drawingRef.current.startSnapshot = activeLayer.dataUrl;
     drawingRef.current.layerId = activeLayer.id;
     drawingRef.current.frameId = frame.id;
     drawingLayerIdRef.current = activeLayer.id;
+
     const base = baseRef.current!;
     const bctx = base.getContext("2d")!;
+    const live = liveRef.current!;
+    const lctx = live.getContext("2d")!;
+
+    const cache = cacheRef.current;
+    const cacheReady =
+      cache.frameId === frame.id && cache.activeId === activeLayer.id && cache.active && cache.others;
+
+    if (cacheReady) {
+      bctx.clearRect(0, 0, base.width, base.height);
+      bctx.drawImage(cache.others!, 0, 0);
+      lctx.clearRect(0, 0, live.width, live.height);
+      lctx.drawImage(cache.active!, 0, 0);
+      return;
+    }
+
+    // Fallback: cache not ready yet — recomposite asynchronously.
     bctx.clearRect(0, 0, base.width, base.height);
     for (const layer of frame.layers) {
       if (!layer.visible) continue;
@@ -397,8 +459,6 @@ export const DrawingCanvas = ({ className }: Props) => {
         bctx.drawImage(img, 0, 0);
       } catch { /* ignore */ }
     }
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
     lctx.clearRect(0, 0, live.width, live.height);
     await drawActiveLayerToContext(lctx);
   };
@@ -585,18 +645,12 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     // Drawing
     if (dr.kind === "shape") {
-      // Re-render: active layer + shape preview on top
+      // Re-render: active layer baseline (sync, from cache) + shape preview on top
       const live = liveRef.current!;
       const lctx = live.getContext("2d")!;
       lctx.clearRect(0, 0, live.width, live.height);
-      // restore original active-layer pixels then overlay shape
-      // (we redraw from snapshot to avoid accumulating partial shapes)
-      if (drawingRef.current.startSnapshot) {
-        try {
-          const img = await loadImage(drawingRef.current.startSnapshot);
-          lctx.drawImage(img, 0, 0);
-        } catch { /* ignore */ }
-      }
+      const cache = cacheRef.current;
+      if (cache.active) lctx.drawImage(cache.active, 0, 0);
       renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
       return;
     }
@@ -624,21 +678,14 @@ export const DrawingCanvas = ({ className }: Props) => {
     dragRef.current = { kind: "none" };
 
     if (dr.kind === "shape") {
-      // Note: renderShape was called in pointermove with snapshot baseline —
-      // the live canvas now contains "snapshot + shape". Commit it.
-      // If the user just clicked without dragging, render a single-point shape.
+      // Re-render final shape on top of active-layer baseline (sync) and commit.
       const p = getCanvasPoint(e.clientX, e.clientY);
-      if (drawingRef.current.startSnapshot) {
-        const live = liveRef.current!;
-        const lctx = live.getContext("2d")!;
-        // ensure at least one render happened
-        lctx.clearRect(0, 0, live.width, live.height);
-        try {
-          const img = await loadImage(drawingRef.current.startSnapshot);
-          lctx.drawImage(img, 0, 0);
-        } catch { /* ignore */ }
-        renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
-      }
+      const live = liveRef.current!;
+      const lctx = live.getContext("2d")!;
+      lctx.clearRect(0, 0, live.width, live.height);
+      const cache = cacheRef.current;
+      if (cache.active) lctx.drawImage(cache.active, 0, 0);
+      renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
       commitLiveStroke();
       return;
     }

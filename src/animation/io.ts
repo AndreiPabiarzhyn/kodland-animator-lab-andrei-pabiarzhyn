@@ -35,7 +35,9 @@ export const exportGif = async (
     const flat = document.createElement("canvas");
     flat.width = W; flat.height = H;
     const fctx = flat.getContext("2d")!;
-    fctx.fillStyle = "#ffffff";
+    // Fill background with the transparency key color (magenta). Pixels that
+    // remain this exact color in the encoded frame become transparent in GIF.
+    fctx.fillStyle = "#ff00ff";
     fctx.fillRect(0, 0, W, H);
     fctx.drawImage(layer, 0, 0);
     composited.push(flat);
@@ -43,12 +45,16 @@ export const exportGif = async (
 
   return new Promise((resolve, reject) => {
     try {
+      // Use a magenta key color so pixels that were transparent on the source
+      // canvas remain transparent in the GIF (GIF only supports 1-bit alpha).
+      const TRANSPARENT_KEY = 0xff00ff;
       const gif = new GIF({
         workers: 2,
         quality: 10,
         width: W,
         height: H,
         workerScript: GIF_WORKER_URL,
+        transparent: TRANSPARENT_KEY,
       });
       const interval = Math.max(20, Math.round(1000 / Math.max(1, project.fps)));
       project.frames.forEach((f, i) => {
