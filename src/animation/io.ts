@@ -35,7 +35,9 @@ export const exportGif = async (
     const flat = document.createElement("canvas");
     flat.width = W; flat.height = H;
     const fctx = flat.getContext("2d")!;
-    fctx.fillStyle = "#ffffff";
+    // Fill background with the transparency key color (magenta). Pixels that
+    // remain this exact color in the encoded frame become transparent in GIF.
+    fctx.fillStyle = "#ff00ff";
     fctx.fillRect(0, 0, W, H);
     fctx.drawImage(layer, 0, 0);
     composited.push(flat);
