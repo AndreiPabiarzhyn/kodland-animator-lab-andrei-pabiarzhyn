@@ -423,16 +423,33 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.restore();
   };
 
-  /** Begin a draw-into-live workflow: composite all OTHER visible layers into base
-   * and render the active layer into live so we can paint directly into it. */
+  /** Begin a draw-into-live workflow synchronously using the offscreen cache.
+   *  Prevents flicker by avoiding async image decode at the start of a stroke. */
   const beginLiveStroke = async () => {
     if (!activeLayer || !frame) return;
     drawingRef.current.startSnapshot = activeLayer.dataUrl;
     drawingRef.current.layerId = activeLayer.id;
     drawingRef.current.frameId = frame.id;
     drawingLayerIdRef.current = activeLayer.id;
+
     const base = baseRef.current!;
     const bctx = base.getContext("2d")!;
+    const live = liveRef.current!;
+    const lctx = live.getContext("2d")!;
+
+    const cache = cacheRef.current;
+    const cacheReady =
+      cache.frameId === frame.id && cache.activeId === activeLayer.id && cache.active && cache.others;
+
+    if (cacheReady) {
+      bctx.clearRect(0, 0, base.width, base.height);
+      bctx.drawImage(cache.others!, 0, 0);
+      lctx.clearRect(0, 0, live.width, live.height);
+      lctx.drawImage(cache.active!, 0, 0);
+      return;
+    }
+
+    // Fallback: cache not ready yet — recomposite asynchronously.
     bctx.clearRect(0, 0, base.width, base.height);
     for (const layer of frame.layers) {
       if (!layer.visible) continue;
@@ -442,8 +459,6 @@ export const DrawingCanvas = ({ className }: Props) => {
         bctx.drawImage(img, 0, 0);
       } catch { /* ignore */ }
     }
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
     lctx.clearRect(0, 0, live.width, live.height);
     await drawActiveLayerToContext(lctx);
   };
