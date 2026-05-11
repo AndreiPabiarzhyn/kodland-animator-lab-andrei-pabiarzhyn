@@ -11,6 +11,7 @@ const TOOL_KEYS: Record<string, string> = {
   r: "rectangle",
   c: "circle",
   l: "line",
+  h: "pan",
 };
 
 export const useShortcuts = () => {
