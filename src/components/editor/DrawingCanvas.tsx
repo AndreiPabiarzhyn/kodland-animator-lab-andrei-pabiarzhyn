@@ -223,6 +223,42 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
+  // Build/refresh synchronous offscreen cache (active layer + others composite)
+  // whenever the frame, its layers, or the active layer changes.
+  useEffect(() => {
+    if (!frame) return;
+    let cancelled = false;
+    (async () => {
+      const W = project.width, H = project.height;
+      const active = document.createElement("canvas");
+      active.width = W; active.height = H;
+      const others = document.createElement("canvas");
+      others.width = W; others.height = H;
+      const actx = active.getContext("2d")!;
+      const octx = others.getContext("2d")!;
+      for (const layer of frame.layers) {
+        if (!layer.visible) continue;
+        try {
+          const img = await loadImage(layer.dataUrl);
+          if (cancelled) return;
+          if (layer.id === frame.activeLayerId) {
+            actx.drawImage(img, 0, 0);
+          } else {
+            octx.drawImage(img, 0, 0);
+          }
+        } catch { /* ignore */ }
+      }
+      if (cancelled) return;
+      cacheRef.current = {
+        frameId: frame.id,
+        activeId: frame.activeLayerId,
+        active,
+        others,
+      };
+    })();
+    return () => { cancelled = true; };
+  }, [frame, project.width, project.height]);
+
   // Auto-cancel any active selection when the active layer / frame changes,
   // otherwise the floating pixels would leak into the wrong layer.
   const activeLayerId = frame?.activeLayerId ?? null;
