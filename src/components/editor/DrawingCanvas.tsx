@@ -645,18 +645,12 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     // Drawing
     if (dr.kind === "shape") {
-      // Re-render: active layer + shape preview on top
+      // Re-render: active layer baseline (sync, from cache) + shape preview on top
       const live = liveRef.current!;
       const lctx = live.getContext("2d")!;
       lctx.clearRect(0, 0, live.width, live.height);
-      // restore original active-layer pixels then overlay shape
-      // (we redraw from snapshot to avoid accumulating partial shapes)
-      if (drawingRef.current.startSnapshot) {
-        try {
-          const img = await loadImage(drawingRef.current.startSnapshot);
-          lctx.drawImage(img, 0, 0);
-        } catch { /* ignore */ }
-      }
+      const cache = cacheRef.current;
+      if (cache.active) lctx.drawImage(cache.active, 0, 0);
       renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
       return;
     }
