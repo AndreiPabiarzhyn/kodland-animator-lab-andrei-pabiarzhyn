@@ -50,6 +50,8 @@ export const DrawingCanvas = ({ className }: Props) => {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [panActive, setPanActive] = useState(false);
   const dragRef = useRef<DragMode>({ kind: "none" });
+  const selectionRef = useRef<Selection | null>(null);
+  useEffect(() => { selectionRef.current = selection; }, [selection]);
 
   const drawingRef = useRef<{
     active: boolean;
@@ -205,7 +207,7 @@ export const DrawingCanvas = ({ className }: Props) => {
         dragRef.current.kind === "move" ||
         dragRef.current.kind === "resize" ||
         dragRef.current.kind === "rotate" ||
-        selection !== null;
+        selectionRef.current !== null;
       if (!busy) paintActiveToLive();
     })();
     return () => { cancelled = true; };
