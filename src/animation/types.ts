@@ -7,7 +7,8 @@ export type ToolId =
   | "mirror"
   | "rectangle"
   | "circle"
-  | "line";
+  | "line"
+  | "pan";
 
 export interface Layer {
   id: string;

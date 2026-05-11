@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { Plus, Minus as MinusIcon, Maximize2 } from "lucide-react";
 import { useStore } from "@/animation/store";
 import { ONION_OPACITY, ONION_TINT } from "@/animation/types";
 import { floodFill, hexToRgba, hexToRgbArr, loadImage, rgbToHex, clamp } from "@/animation/utils";
@@ -6,14 +7,12 @@ import { floodFill, hexToRgba, hexToRgbArr, loadImage, rgbToHex, clamp } from "@
 interface Props { className?: string }
 
 type Selection = {
-  // origin (pre-transform) source rect on the active layer
   sx: number; sy: number; sw: number; sh: number;
-  // current transform
-  cx: number; cy: number;       // center
-  w: number; h: number;          // current width/height (can be negative when flipped)
-  rot: number;                   // radians
-  imageData: ImageData;          // captured pixels
-  baseSnapshot: string;          // for undo
+  cx: number; cy: number;
+  w: number; h: number;
+  rot: number;
+  imageData: ImageData;
+  baseSnapshot: string;
 };
 
 type DragMode =
@@ -26,12 +25,14 @@ type DragMode =
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 16;
+const MIN_VISIBLE = 80; // keep at least this many px of canvas inside viewport
 
 export const DrawingCanvas = ({ className }: Props) => {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const baseRef = useRef<HTMLCanvasElement>(null);   // composited frame (all visible layers)
-  const liveRef = useRef<HTMLCanvasElement>(null);   // active stroke / shapes / selection overlay
-  const onionRef = useRef<HTMLCanvasElement>(null);  // onion skin (previous frame only)
+  const belowRef = useRef<HTMLCanvasElement>(null);   // layers strictly below active
+  const aboveRef = useRef<HTMLCanvasElement>(null);   // layers strictly above active
+  const liveRef = useRef<HTMLCanvasElement>(null);    // active layer + live stroke + overlays
+  const onionRef = useRef<HTMLCanvasElement>(null);   // onion skin
 
   const project = useStore((s) => s.project);
   const currentFrame = useStore((s) => s.currentFrame);
@@ -44,9 +45,13 @@ export const DrawingCanvas = ({ className }: Props) => {
   const activeLayer = frame?.layers.find((l) => l.id === frame.activeLayerId);
 
   const [view, setView] = useState({ scale: 1, tx: 0, ty: 0 });
+  const [wrapSize, setWrapSize] = useState({ w: 0, h: 0 });
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [panActive, setPanActive] = useState(false);
   const dragRef = useRef<DragMode>({ kind: "none" });
+  const selectionRef = useRef<Selection | null>(null);
+  useEffect(() => { selectionRef.current = selection; }, [selection]);
 
   const drawingRef = useRef<{
     active: boolean;
@@ -55,72 +60,161 @@ export const DrawingCanvas = ({ className }: Props) => {
     layerId: string | null;
     frameId: string | null;
   }>({ active: false, last: null, startSnapshot: null, layerId: null, frameId: null });
-  /** When drawing, base canvas excludes this layer id so live canvas owns it */
-  const drawingLayerIdRef = useRef<string | null>(null);
-  /** Synchronous cache of active layer pixels + "others" composite,
-   *  rebuilt asynchronously when frame/layers change. Used by shape preview
-   *  and stroke begin so the canvas never flickers waiting for image decode. */
+
+  /** Synchronous offscreen caches of the 3-way layer split for the current frame. */
   const cacheRef = useRef<{
     frameId: string | null;
     activeId: string | null;
+    below: HTMLCanvasElement | null;
     active: HTMLCanvasElement | null;
-    others: HTMLCanvasElement | null;
-  }>({ frameId: null, activeId: null, active: null, others: null });
+    above: HTMLCanvasElement | null;
+  }>({ frameId: null, activeId: null, below: null, active: null, above: null });
+
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
     active: false, startX: 0, startY: 0, tx0: 0, ty0: 0,
   });
 
-  // Fit canvas to container
-  useLayoutEffect(() => {
-    const fit = () => {
-      const wrap = wrapRef.current;
-      if (!wrap) return;
-      const pad = 32;
-      const w = wrap.clientWidth - pad * 2;
-      const h = wrap.clientHeight - pad * 2;
-      if (w <= 0 || h <= 0) return;
-      const scale = Math.min(w / project.width, h / project.height, 1.5);
-      setView({ scale, tx: 0, ty: 0 });
+  // ----- View bounds clamping -----
+  const clampView = useCallback((v: { scale: number; tx: number; ty: number }) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return v;
+    const wW = wrap.clientWidth, wH = wrap.clientHeight;
+    const cW = project.width * v.scale;
+    const cH = project.height * v.scale;
+    // canvas center on screen = (wW/2 + tx, wH/2 + ty)
+    // canvas left edge = wW/2 + tx - cW/2; right edge = wW/2 + tx + cW/2
+    // require: right edge >= MIN_VISIBLE  AND  left edge <= wW - MIN_VISIBLE
+    const minTx = MIN_VISIBLE - wW / 2 - cW / 2;
+    const maxTx = wW / 2 + cW / 2 - MIN_VISIBLE;
+    const minTy = MIN_VISIBLE - wH / 2 - cH / 2;
+    const maxTy = wH / 2 + cH / 2 - MIN_VISIBLE;
+    return {
+      scale: v.scale,
+      tx: clamp(v.tx, minTx, maxTx),
+      ty: clamp(v.ty, minTy, maxTy),
     };
-    fit();
-    const ro = new ResizeObserver(fit);
-    if (wrapRef.current) ro.observe(wrapRef.current);
-    return () => ro.disconnect();
   }, [project.width, project.height]);
 
-  // Composite all visible layers into baseRef whenever frame/layers change.
-  // While drawing on the active layer we exclude it (live canvas shows it).
+  // ----- Initial fit & wrap size tracking -----
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const measure = () => {
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      setWrapSize({ w, h });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  // Initial center & fit on project size change
   useEffect(() => {
-    const cv = baseRef.current;
-    if (!cv || !frame) return;
-    cv.width = project.width;
-    cv.height = project.height;
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const pad = 32;
+    const w = wrap.clientWidth - pad * 2;
+    const h = wrap.clientHeight - pad * 2;
+    if (w <= 0 || h <= 0) return;
+    const scale = Math.min(w / project.width, h / project.height, 1.5);
+    setView({ scale, tx: 0, ty: 0 });
+  }, [project.width, project.height]);
+
+  // ----- Set canvas pixel sizes on project size change -----
+  useEffect(() => {
+    for (const r of [belowRef, aboveRef, liveRef, onionRef]) {
+      if (r.current) {
+        r.current.width = project.width;
+        r.current.height = project.height;
+      }
+    }
+  }, [project.width, project.height]);
+
+  // ----- Sync paint helpers -----
+  const paintBelow = useCallback(() => {
+    const c = cacheRef.current;
+    const cv = belowRef.current;
+    if (!cv) return;
     const ctx = cv.getContext("2d")!;
     ctx.clearRect(0, 0, cv.width, cv.height);
+    if (c.below) ctx.drawImage(c.below, 0, 0);
+  }, []);
+  const paintAbove = useCallback(() => {
+    const c = cacheRef.current;
+    const cv = aboveRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d")!;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (c.above) ctx.drawImage(c.above, 0, 0);
+  }, []);
+  const paintActiveToLive = useCallback(() => {
+    const c = cacheRef.current;
+    const cv = liveRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d")!;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (c.active) ctx.drawImage(c.active, 0, 0);
+  }, []);
+
+  // ----- Build cache from frame, paint sync where safe -----
+  useEffect(() => {
+    if (!frame) return;
     let cancelled = false;
     (async () => {
+      const W = project.width, H = project.height;
+      const below = document.createElement("canvas"); below.width = W; below.height = H;
+      const active = document.createElement("canvas"); active.width = W; active.height = H;
+      const above = document.createElement("canvas"); above.width = W; above.height = H;
+      const bctx = below.getContext("2d")!;
+      const actx = active.getContext("2d")!;
+      const ovctx = above.getContext("2d")!;
+      let foundActive = false;
       for (const layer of frame.layers) {
+        if (layer.id === frame.activeLayerId) {
+          foundActive = true;
+          if (layer.visible) {
+            try {
+              const img = await loadImage(layer.dataUrl);
+              if (cancelled) return;
+              actx.drawImage(img, 0, 0);
+            } catch { /* ignore */ }
+          }
+          continue;
+        }
         if (!layer.visible) continue;
-        if (drawingLayerIdRef.current === layer.id) continue;
         try {
           const img = await loadImage(layer.dataUrl);
           if (cancelled) return;
-          ctx.drawImage(img, 0, 0);
+          if (!foundActive) bctx.drawImage(img, 0, 0);
+          else ovctx.drawImage(img, 0, 0);
         } catch { /* ignore */ }
       }
+      if (cancelled) return;
+      cacheRef.current = {
+        frameId: frame.id,
+        activeId: frame.activeLayerId,
+        below, active, above,
+      };
+      // Always repaint below/above (never disturbed by user input).
+      paintBelow();
+      paintAbove();
+      // Only repaint live (active) if user is not currently drawing/dragging on it.
+      const busy =
+        drawingRef.current.active ||
+        dragRef.current.kind === "shape" ||
+        dragRef.current.kind === "marquee" ||
+        dragRef.current.kind === "move" ||
+        dragRef.current.kind === "resize" ||
+        dragRef.current.kind === "rotate" ||
+        selectionRef.current !== null;
+      if (!busy) paintActiveToLive();
     })();
-    if (liveRef.current) {
-      liveRef.current.width = project.width;
-      liveRef.current.height = project.height;
-    }
-    if (onionRef.current) {
-      onionRef.current.width = project.width;
-      onionRef.current.height = project.height;
-    }
     return () => { cancelled = true; };
-  }, [frame, project.width, project.height]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frame, project.width, project.height, paintBelow, paintAbove, paintActiveToLive]);
 
-  // Onion: previous frame only (composited), tinted, fixed opacity
+  // ----- Onion skin: previous frame only -----
   useEffect(() => {
     const cv = onionRef.current;
     if (!cv) return;
@@ -131,7 +225,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     if (!prev) return;
     let cancelled = false;
     (async () => {
-      // composite prev frame to a temp canvas first
       const tmp = document.createElement("canvas");
       tmp.width = cv.width; tmp.height = cv.height;
       const tctx = tmp.getContext("2d")!;
@@ -143,11 +236,9 @@ export const DrawingCanvas = ({ className }: Props) => {
           tctx.drawImage(img, 0, 0);
         } catch { /* ignore */ }
       }
-      // tint
       tctx.globalCompositeOperation = "source-atop";
       tctx.fillStyle = ONION_TINT;
       tctx.fillRect(0, 0, tmp.width, tmp.height);
-      // draw onto onion canvas with fixed opacity
       ctx.clearRect(0, 0, cv.width, cv.height);
       ctx.globalAlpha = ONION_OPACITY;
       ctx.drawImage(tmp, 0, 0);
@@ -156,7 +247,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     return () => { cancelled = true; };
   }, [onion.enabled, currentFrame, project.frames]);
 
-  // Helpers
+  // ----- Helpers -----
   const getCanvasPoint = useCallback((clientX: number, clientY: number) => {
     const cv = liveRef.current!;
     const rect = cv.getBoundingClientRect();
@@ -165,19 +256,20 @@ export const DrawingCanvas = ({ className }: Props) => {
     return { x, y };
   }, []);
 
-  // Render selection overlay onto liveRef
+  // ----- Selection overlay (draws active baseline + transform handles) -----
   const renderSelectionOverlay = useCallback(() => {
     const live = liveRef.current;
     if (!live) return;
     const ctx = live.getContext("2d")!;
     ctx.clearRect(0, 0, live.width, live.height);
+    // Active baseline first so non-selected pixels stay visible
+    const c = cacheRef.current;
+    if (c.active) ctx.drawImage(c.active, 0, 0);
     if (!selection) return;
 
-    // Draw transformed image
     ctx.save();
     ctx.translate(selection.cx, selection.cy);
     ctx.rotate(selection.rot);
-    // Render the captured imageData via offscreen canvas
     const off = document.createElement("canvas");
     off.width = selection.sw;
     off.height = selection.sh;
@@ -185,7 +277,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.drawImage(off, -selection.w / 2, -selection.h / 2, selection.w, selection.h);
     ctx.restore();
 
-    // Bounding box + handles in screen-aligned but rotated frame
     ctx.save();
     ctx.translate(selection.cx, selection.cy);
     ctx.rotate(selection.rot);
@@ -196,7 +287,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.strokeStyle = "hsl(195 90% 55%)";
     ctx.strokeRect(-hx, -hy, selection.w, selection.h);
     ctx.setLineDash([]);
-    // handles
     const handleSize = 10 / view.scale;
     const handles: Array<[number, number]> = [
       [-hx, -hy], [0, -hy], [hx, -hy],
@@ -209,7 +299,6 @@ export const DrawingCanvas = ({ className }: Props) => {
       ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
       ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
     }
-    // rotation handle
     ctx.beginPath();
     ctx.moveTo(0, -hy);
     ctx.lineTo(0, -hy - 24 / view.scale);
@@ -223,57 +312,17 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
-  // Build/refresh synchronous offscreen cache (active layer + others composite)
-  // whenever the frame, its layers, or the active layer changes.
-  useEffect(() => {
-    if (!frame) return;
-    let cancelled = false;
-    (async () => {
-      const W = project.width, H = project.height;
-      const active = document.createElement("canvas");
-      active.width = W; active.height = H;
-      const others = document.createElement("canvas");
-      others.width = W; others.height = H;
-      const actx = active.getContext("2d")!;
-      const octx = others.getContext("2d")!;
-      for (const layer of frame.layers) {
-        if (!layer.visible) continue;
-        try {
-          const img = await loadImage(layer.dataUrl);
-          if (cancelled) return;
-          if (layer.id === frame.activeLayerId) {
-            actx.drawImage(img, 0, 0);
-          } else {
-            octx.drawImage(img, 0, 0);
-          }
-        } catch { /* ignore */ }
-      }
-      if (cancelled) return;
-      cacheRef.current = {
-        frameId: frame.id,
-        activeId: frame.activeLayerId,
-        active,
-        others,
-      };
-    })();
-    return () => { cancelled = true; };
-  }, [frame, project.width, project.height]);
-
-  // Auto-cancel any active selection when the active layer / frame changes,
-  // otherwise the floating pixels would leak into the wrong layer.
+  // ----- Reset on frame/active layer change -----
   const activeLayerId = frame?.activeLayerId ?? null;
   useEffect(() => {
     if (drawingRef.current.active || dragRef.current.kind === "shape") commitLiveStroke();
     setSelection(null);
     dragRef.current = { kind: "none" };
     drawingRef.current.active = false;
-    drawingLayerIdRef.current = null;
-    const live = liveRef.current;
-    if (live) live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayerId, currentFrame]);
 
-  // Apply selection's transformed pixels back to active layer + clear selection
+  // ----- Selection commit / cancel -----
   const commitSelection = useCallback(async () => {
     if (!selection || !activeLayer) return;
     const layerCv = document.createElement("canvas");
@@ -284,8 +333,6 @@ export const DrawingCanvas = ({ className }: Props) => {
       const img = await loadImage(activeLayer.dataUrl);
       lctx.drawImage(img, 0, 0);
     } catch { /* ignore */ }
-    // The pixels in the source rect were already cleared at capture time;
-    // now stamp the transformed selection.
     lctx.save();
     lctx.translate(selection.cx, selection.cy);
     lctx.rotate(selection.rot);
@@ -299,14 +346,12 @@ export const DrawingCanvas = ({ className }: Props) => {
     setSelection(null);
   }, [selection, activeLayer, project.width, project.height, updateActiveLayerData]);
 
-  // Cancel selection (restore baseSnapshot)
   const cancelSelection = useCallback(() => {
     if (!selection) return;
     updateActiveLayerData(selection.baseSnapshot);
     setSelection(null);
   }, [selection, updateActiveLayerData]);
 
-  // ESC cancels selection, Enter commits
   useEffect(() => {
     if (!selection) return;
     const onKey = (e: KeyboardEvent) => {
@@ -319,10 +364,8 @@ export const DrawingCanvas = ({ className }: Props) => {
     return () => window.removeEventListener("keydown", onKey);
   }, [selection, commitSelection, cancelSelection]);
 
-  // Hit-test selection handles in canvas coords
   const hitTestSelection = (p: { x: number; y: number }): string | null => {
     if (!selection) return null;
-    // Transform point into selection's local space
     const dx = p.x - selection.cx;
     const dy = p.y - selection.cy;
     const cos = Math.cos(-selection.rot);
@@ -332,7 +375,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     const hx = selection.w / 2;
     const hy = selection.h / 2;
     const tol = 12 / view.scale;
-    // rotation handle
     if (Math.abs(lx) < tol && Math.abs(ly - (-hy - 24 / view.scale)) < tol) return "rotate";
     const handles: Array<[string, number, number]> = [
       ["nw", -hx, -hy], ["n", 0, -hy], ["ne", hx, -hy],
@@ -346,6 +388,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     return null;
   };
 
+  // ----- Stroke drawing -----
   const drawStrokeSegment = (
     ctx: CanvasRenderingContext2D,
     a: { x: number; y: number },
@@ -368,7 +411,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.stroke();
   };
 
-  /** Draw stroke segment + mirrored copies for Mirror Pen */
   const drawMirroredSegment = (
     ctx: CanvasRenderingContext2D,
     a: { x: number; y: number },
@@ -389,7 +431,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     }
   };
 
-  /** Render a shape preview onto live ctx (clears first) */
   const renderShape = (
     ctx: CanvasRenderingContext2D,
     shape: "rectangle" | "circle" | "line",
@@ -423,97 +464,63 @@ export const DrawingCanvas = ({ className }: Props) => {
     ctx.restore();
   };
 
-  /** Begin a draw-into-live workflow synchronously using the offscreen cache.
-   *  Prevents flicker by avoiding async image decode at the start of a stroke. */
-  const beginLiveStroke = async () => {
+  const beginLiveStroke = () => {
     if (!activeLayer || !frame) return;
     drawingRef.current.startSnapshot = activeLayer.dataUrl;
     drawingRef.current.layerId = activeLayer.id;
     drawingRef.current.frameId = frame.id;
-    drawingLayerIdRef.current = activeLayer.id;
-
-    const base = baseRef.current!;
-    const bctx = base.getContext("2d")!;
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
-
-    const cache = cacheRef.current;
-    const cacheReady =
-      cache.frameId === frame.id && cache.activeId === activeLayer.id && cache.active && cache.others;
-
-    if (cacheReady) {
-      bctx.clearRect(0, 0, base.width, base.height);
-      bctx.drawImage(cache.others!, 0, 0);
-      lctx.clearRect(0, 0, live.width, live.height);
-      lctx.drawImage(cache.active!, 0, 0);
-      return;
-    }
-
-    // Fallback: cache not ready yet — recomposite asynchronously.
-    bctx.clearRect(0, 0, base.width, base.height);
-    for (const layer of frame.layers) {
-      if (!layer.visible) continue;
-      if (layer.id === activeLayer.id) continue;
-      try {
-        const img = await loadImage(layer.dataUrl);
-        bctx.drawImage(img, 0, 0);
-      } catch { /* ignore */ }
-    }
-    lctx.clearRect(0, 0, live.width, live.height);
-    await drawActiveLayerToContext(lctx);
+    // live already shows cache.active synchronously; nothing to do.
   };
 
-  /** Commit live canvas into the layer that started the stroke (not whatever is
-   * active right now), so layer switches mid-stroke don't corrupt data. */
   const commitLiveStroke = useCallback(() => {
     const live = liveRef.current;
     const layerId = drawingRef.current.layerId;
     const frameId = drawingRef.current.frameId;
     const snap = drawingRef.current.startSnapshot ?? undefined;
     if (live && layerId && frameId) {
+      const dataUrl = live.toDataURL("image/png");
+      // Keep cache.active in sync so the next cache rebuild is a no-op visually
+      const c = cacheRef.current;
+      if (c.active && c.activeId === layerId) {
+        const ax = c.active.getContext("2d")!;
+        ax.clearRect(0, 0, c.active.width, c.active.height);
+        ax.drawImage(live, 0, 0);
+      }
       const s = useStore.getState();
       const idx = s.project.frames.findIndex((f) => f.id === frameId);
-      s.updateLayerData(idx, layerId, live.toDataURL("image/png"), snap);
+      s.updateLayerData(idx, layerId, dataUrl, snap);
     }
-    drawingLayerIdRef.current = null;
     drawingRef.current.layerId = null;
     drawingRef.current.frameId = null;
     drawingRef.current.startSnapshot = null;
     drawingRef.current.last = null;
     drawingRef.current.active = false;
-    if (live) live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
+    // do NOT clear live — it represents the active layer post-commit.
   }, []);
 
+  // Auto-commit when tool changes mid-stroke
   useEffect(() => {
     if (!drawingRef.current.active && dragRef.current.kind !== "shape") return;
     commitLiveStroke();
   }, [tool.tool, commitLiveStroke]);
 
-  // Draw the active layer (fast path) into a temp canvas — used during pencil stroke
-  const drawActiveLayerToContext = async (ctx: CanvasRenderingContext2D) => {
-    if (!activeLayer) return;
-    try {
-      const img = await loadImage(activeLayer.dataUrl);
-      ctx.drawImage(img, 0, 0);
-    } catch { /* ignore */ }
-  };
-
+  // ----- Pointer events -----
   const onPointerDown = async (e: React.PointerEvent<HTMLCanvasElement>) => {
     const cv = liveRef.current!;
     cv.setPointerCapture(e.pointerId);
     const p = getCanvasPoint(e.clientX, e.clientY);
 
-    // Pan with middle mouse or shift+left
-    if (e.button === 1 || (e.shiftKey && e.button === 0)) {
+    // Pan: middle mouse, shift+left, or pan tool
+    if (e.button === 1 || (e.shiftKey && e.button === 0) || tool.tool === "pan") {
       panRef.current = {
         active: true, startX: e.clientX, startY: e.clientY, tx0: view.tx, ty0: view.ty,
       };
+      setPanActive(true);
       return;
     }
 
     if (!activeLayer || !frame) return;
 
-    // Selection / transform tool
     if (tool.tool === "select") {
       const hit = hitTestSelection(p);
       if (selection && hit) {
@@ -531,25 +538,31 @@ export const DrawingCanvas = ({ className }: Props) => {
         }
         return;
       }
-      // Outside existing selection -> commit then start new marquee
       if (selection) await commitSelection();
       dragRef.current = { kind: "marquee", x0: p.x, y0: p.y };
       return;
     }
 
-    // If a selection is active and another tool is used, commit first
     if (selection) await commitSelection();
 
     if (tool.tool === "eyedropper") {
-      const base = baseRef.current!;
-      const ctx = base.getContext("2d")!;
-      const d = ctx.getImageData(clamp(Math.round(p.x), 0, base.width - 1), clamp(Math.round(p.y), 0, base.height - 1), 1, 1).data;
+      // Sample full composite of all 3 cache layers
+      const W = project.width, H = project.height;
+      const tmp = document.createElement("canvas");
+      tmp.width = W; tmp.height = H;
+      const tctx = tmp.getContext("2d")!;
+      const c = cacheRef.current;
+      if (c.below) tctx.drawImage(c.below, 0, 0);
+      if (c.active) tctx.drawImage(c.active, 0, 0);
+      if (c.above) tctx.drawImage(c.above, 0, 0);
+      const px = clamp(Math.round(p.x), 0, W - 1);
+      const py = clamp(Math.round(p.y), 0, H - 1);
+      const d = tctx.getImageData(px, py, 1, 1).data;
       if (d[3] > 0) setTool({ color: rgbToHex(d[0], d[1], d[2]) });
       return;
     }
 
     if (tool.tool === "fill") {
-      // Operate ONLY on active layer
       const layerCv = document.createElement("canvas");
       layerCv.width = project.width;
       layerCv.height = project.height;
@@ -567,29 +580,28 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
 
-    // Shape tools (rectangle / circle / line)
     if (tool.tool === "rectangle" || tool.tool === "circle" || tool.tool === "line") {
-      await beginLiveStroke();
+      beginLiveStroke();
       dragRef.current = { kind: "shape", shape: tool.tool, x0: p.x, y0: p.y };
       return;
     }
 
-    // Pencil / Eraser / Mirror Pen — draw into live canvas, commit on up
+    // Pencil / Eraser / Mirror Pen
     drawingRef.current.active = true;
     drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
-    await beginLiveStroke();
+    beginLiveStroke();
     const live = liveRef.current!;
     const lctx = live.getContext("2d")!;
     if (tool.tool === "mirror") drawMirroredSegment(lctx, p, p);
     else drawStrokeSegment(lctx, p, p, tool.tool === "eraser");
   };
 
-  const onPointerMove = async (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = getCanvasPoint(e.clientX, e.clientY);
     setCursorPos(p);
 
     if (panRef.current.active) {
-      setView((v) => ({
+      setView((v) => clampView({
         ...v,
         tx: panRef.current.tx0 + (e.clientX - panRef.current.startX),
         ty: panRef.current.ty0 + (e.clientY - panRef.current.startY),
@@ -597,12 +609,13 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
 
-    // Selection drag
     const dr = dragRef.current;
     if (dr.kind === "marquee") {
       const live = liveRef.current!;
       const ctx = live.getContext("2d")!;
       ctx.clearRect(0, 0, live.width, live.height);
+      const c = cacheRef.current;
+      if (c.active) ctx.drawImage(c.active, 0, 0);
       const x = Math.min(dr.x0, p.x), y = Math.min(dr.y0, p.y);
       const w = Math.abs(p.x - dr.x0), h = Math.abs(p.y - dr.y0);
       ctx.lineWidth = 2 / view.scale;
@@ -617,7 +630,6 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
     if (dr.kind === "resize" && selection) {
-      // transform delta into local axis
       const dx = p.x - dr.ox;
       const dy = p.y - dr.oy;
       const cos = Math.cos(-selection.rot), sin = Math.sin(-selection.rot);
@@ -630,7 +642,6 @@ export const DrawingCanvas = ({ className }: Props) => {
       if (h.includes("w")) { nw = dr.w0 - ldx; cxShift = ldx / 2; }
       if (h.includes("s")) { nh = dr.h0 + ldy; cyShift = ldy / 2; }
       if (h.includes("n")) { nh = dr.h0 - ldy; cyShift = ldy / 2; }
-      // shift center in world space
       const worldShiftX = cxShift * Math.cos(selection.rot) - cyShift * Math.sin(selection.rot);
       const worldShiftY = cxShift * Math.sin(selection.rot) + cyShift * Math.cos(selection.rot);
       setSelection({ ...selection, w: nw, h: nh, cx: dr.cx0 + worldShiftX, cy: dr.cy0 + worldShiftY });
@@ -643,9 +654,7 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
 
-    // Drawing
     if (dr.kind === "shape") {
-      // Re-render: active layer baseline (sync, from cache) + shape preview on top
       const live = liveRef.current!;
       const lctx = live.getContext("2d")!;
       lctx.clearRect(0, 0, live.width, live.height);
@@ -671,6 +680,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     try { liveRef.current?.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
     if (panRef.current.active) {
       panRef.current.active = false;
+      setPanActive(false);
       return;
     }
 
@@ -678,7 +688,6 @@ export const DrawingCanvas = ({ className }: Props) => {
     dragRef.current = { kind: "none" };
 
     if (dr.kind === "shape") {
-      // Re-render final shape on top of active-layer baseline (sync) and commit.
       const p = getCanvasPoint(e.clientX, e.clientY);
       const live = liveRef.current!;
       const lctx = live.getContext("2d")!;
@@ -696,10 +705,9 @@ export const DrawingCanvas = ({ className }: Props) => {
       const y = Math.max(0, Math.floor(Math.min(dr.y0, p.y)));
       const w = Math.floor(Math.abs(p.x - dr.x0));
       const h = Math.floor(Math.abs(p.y - dr.y0));
-      const live = liveRef.current!;
-      live.getContext("2d")!.clearRect(0, 0, live.width, live.height);
+      // Reset live to active baseline
+      paintActiveToLive();
       if (w < 4 || h < 4 || !activeLayer) return;
-      // Capture pixels from active layer
       const layerCv = document.createElement("canvas");
       layerCv.width = project.width;
       layerCv.height = project.height;
@@ -712,7 +720,6 @@ export const DrawingCanvas = ({ className }: Props) => {
       const ch = Math.min(h, project.height - y);
       const imageData = lctx.getImageData(x, y, cw, ch);
       const baseSnapshot = activeLayer.dataUrl;
-      // Clear those pixels from the layer (so the floating selection appears lifted)
       lctx.clearRect(x, y, cw, ch);
       updateActiveLayerData(layerCv.toDataURL("image/png"), baseSnapshot);
       setSelection({
@@ -723,15 +730,14 @@ export const DrawingCanvas = ({ className }: Props) => {
       });
       return;
     }
-    if (dr.kind !== "none") return; // move/resize/rotate complete; selection state already updated
+    if (dr.kind !== "none") return;
 
-    // Drawing commit (pencil / eraser)
     if (!drawingRef.current.active) return;
     drawingRef.current.active = false;
     commitLiveStroke();
   };
 
-  // Smooth, cursor-centered zoom
+  // ----- Wheel zoom (cursor-centered) -----
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const wrap = wrapRef.current;
@@ -739,32 +745,101 @@ export const DrawingCanvas = ({ className }: Props) => {
     const wrect = wrap.getBoundingClientRect();
     const mx = e.clientX - (wrect.left + wrect.width / 2);
     const my = e.clientY - (wrect.top + wrect.height / 2);
-
     const factor = Math.exp(-e.deltaY * 0.0015);
     setView((v) => {
       const newScale = clamp(v.scale * factor, MIN_ZOOM, MAX_ZOOM);
       const realFactor = newScale / v.scale;
       const newTx = mx - (mx - v.tx) * realFactor;
       const newTy = my - (my - v.ty) * realFactor;
-      return { scale: newScale, tx: newTx, ty: newTy };
+      return clampView({ scale: newScale, tx: newTx, ty: newTy });
     });
   };
 
+  // ----- Zoom buttons -----
+  const zoomAtCenter = (factor: number) => {
+    setView((v) => {
+      const newScale = clamp(v.scale * factor, MIN_ZOOM, MAX_ZOOM);
+      const realFactor = newScale / v.scale;
+      return clampView({ scale: newScale, tx: v.tx * realFactor, ty: v.ty * realFactor });
+    });
+  };
+  const centerView = () => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const pad = 32;
+    const w = wrap.clientWidth - pad * 2;
+    const h = wrap.clientHeight - pad * 2;
+    if (w <= 0 || h <= 0) return;
+    const scale = Math.min(w / project.width, h / project.height, 1.5);
+    setView({ scale, tx: 0, ty: 0 });
+  };
+
+  // ----- Scrollbar geometry -----
   const cssW = project.width * view.scale;
   const cssH = project.height * view.scale;
+  const wW = wrapSize.w, wH = wrapSize.h;
+  // Canvas left/right edges in viewport coords
+  const canvasLeft = wW / 2 + view.tx - cssW / 2;
+  const canvasTop = wH / 2 + view.ty - cssH / 2;
+  const showH = cssW > wW && wW > 0;
+  const showV = cssH > wH && wH > 0;
+  // Map to "scroll" positions (0 .. overflow)
+  const overflowX = Math.max(0, cssW - wW);
+  const overflowY = Math.max(0, cssH - wH);
+  const scrollX = clamp(-canvasLeft, 0, overflowX);
+  const scrollY = clamp(-canvasTop, 0, overflowY);
+  // Track widths leave room for the opposite scrollbar
+  const trackW = Math.max(0, wW - (showV ? 14 : 0));
+  const trackH = Math.max(0, wH - (showH ? 14 : 0));
+  const thumbW = showH && cssW > 0 ? Math.max(28, (wW / cssW) * trackW) : 0;
+  const thumbH = showV && cssH > 0 ? Math.max(28, (wH / cssH) * trackH) : 0;
+  const thumbX = overflowX > 0 ? (scrollX / overflowX) * (trackW - thumbW) : 0;
+  const thumbY = overflowY > 0 ? (scrollY / overflowY) * (trackH - thumbH) : 0;
 
-  // Cursor preview ring size in CSS pixels
+  const startScrollDrag = (orient: "h" | "v") => (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const startClient = orient === "h" ? e.clientX : e.clientY;
+    const startScroll = orient === "h" ? scrollX : scrollY;
+    const overflow = orient === "h" ? overflowX : overflowY;
+    const track = orient === "h" ? trackW : trackH;
+    const thumb = orient === "h" ? thumbW : thumbH;
+    if (track - thumb <= 0 || overflow <= 0) return;
+    const onMove = (ev: PointerEvent) => {
+      const delta = (orient === "h" ? ev.clientX : ev.clientY) - startClient;
+      const newScroll = clamp(startScroll + (delta / (track - thumb)) * overflow, 0, overflow);
+      setView((v) => {
+        if (orient === "h") {
+          // scrollX = -canvasLeft = -(wW/2 + tx - cssW/2) -> tx = cssW/2 - wW/2 - scrollX
+          return clampView({ ...v, tx: cssW / 2 - wW / 2 - newScroll });
+        } else {
+          return clampView({ ...v, ty: cssH / 2 - wH / 2 - newScroll });
+        }
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  // ----- Cursor -----
   const cursorCss = tool.size * view.scale;
   const showRing =
     cursorPos !== null &&
     (tool.tool === "pencil" || tool.tool === "eraser" || tool.tool === "mirror");
 
   const cursorStyle =
-    tool.tool === "select" ? "default"
-    : tool.tool === "eyedropper" ? "crosshair"
-    : tool.tool === "fill" ? "cell"
-    : tool.tool === "rectangle" || tool.tool === "circle" || tool.tool === "line" ? "crosshair"
-    : "none";
+    tool.tool === "pan"
+      ? (panActive ? "grabbing" : "grab")
+      : tool.tool === "select" ? "default"
+      : tool.tool === "eyedropper" ? "crosshair"
+      : tool.tool === "fill" ? "cell"
+      : tool.tool === "rectangle" || tool.tool === "circle" || tool.tool === "line" ? "crosshair"
+      : "none";
 
   return (
     <div
@@ -781,14 +856,13 @@ export const DrawingCanvas = ({ className }: Props) => {
           transform: `translate(calc(-50% + ${view.tx}px), calc(-50% + ${view.ty}px))`,
         }}
       >
-        {/* Checkerboard for transparent canvas */}
         <div className="absolute inset-0 rounded-lg shadow-soft checkerboard" aria-hidden />
         <canvas
           ref={onionRef}
           className="absolute inset-0 w-full h-full pointer-events-none rounded-lg"
         />
         <canvas
-          ref={baseRef}
+          ref={belowRef}
           className="absolute inset-0 w-full h-full pointer-events-none rounded-lg"
         />
         <canvas
@@ -803,7 +877,10 @@ export const DrawingCanvas = ({ className }: Props) => {
           onPointerCancel={onPointerUp}
           onContextMenu={(e) => e.preventDefault()}
         />
-        {/* Brush cursor preview */}
+        <canvas
+          ref={aboveRef}
+          className="absolute inset-0 w-full h-full pointer-events-none rounded-lg"
+        />
         {showRing && cursorPos && (
           <div
             className="absolute pointer-events-none rounded-full border-2 border-foreground/80 mix-blend-difference"
@@ -817,10 +894,72 @@ export const DrawingCanvas = ({ className }: Props) => {
           />
         )}
       </div>
-      {/* Zoom hint */}
-      <div className="absolute bottom-2 left-2 text-[11px] font-semibold bg-background/70 backdrop-blur px-2 py-1 rounded-lg text-muted-foreground tabular-nums pointer-events-none">
+
+      {/* Zoom % indicator */}
+      <div className="absolute bottom-4 left-2 text-[11px] font-semibold bg-background/70 backdrop-blur px-2 py-1 rounded-lg text-muted-foreground tabular-nums pointer-events-none">
         {Math.round(view.scale * 100)}%
       </div>
+
+      {/* Zoom + Center buttons */}
+      <div className="absolute top-2 right-2 flex flex-col gap-1.5 z-10">
+        <button
+          type="button"
+          onClick={() => zoomAtCenter(1.2)}
+          aria-label="Zoom in"
+          className="h-8 w-8 rounded-lg bg-background/85 hover:bg-background shadow-tool border border-border flex items-center justify-center text-foreground transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomAtCenter(1 / 1.2)}
+          aria-label="Zoom out"
+          className="h-8 w-8 rounded-lg bg-background/85 hover:bg-background shadow-tool border border-border flex items-center justify-center text-foreground transition-colors"
+        >
+          <MinusIcon className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={centerView}
+          aria-label="Center & fit"
+          title="Center & fit"
+          className="h-8 w-8 rounded-lg bg-background/85 hover:bg-background shadow-tool border border-border flex items-center justify-center text-foreground transition-colors"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Horizontal scrollbar */}
+      {showH && (
+        <div
+          className="absolute left-0 bottom-0 h-2.5 bg-muted/40"
+          style={{ width: trackW }}
+        >
+          <div
+            role="scrollbar"
+            aria-orientation="horizontal"
+            onPointerDown={startScrollDrag("h")}
+            className="absolute top-0 h-full rounded-full bg-foreground/30 hover:bg-foreground/50 transition-colors cursor-grab active:cursor-grabbing"
+            style={{ width: thumbW, left: thumbX }}
+          />
+        </div>
+      )}
+      {/* Vertical scrollbar */}
+      {showV && (
+        <div
+          className="absolute right-0 top-0 w-2.5 bg-muted/40"
+          style={{ height: trackH }}
+        >
+          <div
+            role="scrollbar"
+            aria-orientation="vertical"
+            onPointerDown={startScrollDrag("v")}
+            className="absolute left-0 w-full rounded-full bg-foreground/30 hover:bg-foreground/50 transition-colors cursor-grab active:cursor-grabbing"
+            style={{ height: thumbH, top: thumbY }}
+          />
+        </div>
+      )}
+
       {selection && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-2">
           <button
