@@ -678,21 +678,14 @@ export const DrawingCanvas = ({ className }: Props) => {
     dragRef.current = { kind: "none" };
 
     if (dr.kind === "shape") {
-      // Note: renderShape was called in pointermove with snapshot baseline —
-      // the live canvas now contains "snapshot + shape". Commit it.
-      // If the user just clicked without dragging, render a single-point shape.
+      // Re-render final shape on top of active-layer baseline (sync) and commit.
       const p = getCanvasPoint(e.clientX, e.clientY);
-      if (drawingRef.current.startSnapshot) {
-        const live = liveRef.current!;
-        const lctx = live.getContext("2d")!;
-        // ensure at least one render happened
-        lctx.clearRect(0, 0, live.width, live.height);
-        try {
-          const img = await loadImage(drawingRef.current.startSnapshot);
-          lctx.drawImage(img, 0, 0);
-        } catch { /* ignore */ }
-        renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
-      }
+      const live = liveRef.current!;
+      const lctx = live.getContext("2d")!;
+      lctx.clearRect(0, 0, live.width, live.height);
+      const cache = cacheRef.current;
+      if (cache.active) lctx.drawImage(cache.active, 0, 0);
+      renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
       commitLiveStroke();
       return;
     }
