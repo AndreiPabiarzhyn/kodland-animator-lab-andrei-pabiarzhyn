@@ -57,6 +57,15 @@ export const DrawingCanvas = ({ className }: Props) => {
   }>({ active: false, last: null, startSnapshot: null, layerId: null, frameId: null });
   /** When drawing, base canvas excludes this layer id so live canvas owns it */
   const drawingLayerIdRef = useRef<string | null>(null);
+  /** Synchronous cache of active layer pixels + "others" composite,
+   *  rebuilt asynchronously when frame/layers change. Used by shape preview
+   *  and stroke begin so the canvas never flickers waiting for image decode. */
+  const cacheRef = useRef<{
+    frameId: string | null;
+    activeId: string | null;
+    active: HTMLCanvasElement | null;
+    others: HTMLCanvasElement | null;
+  }>({ frameId: null, activeId: null, active: null, others: null });
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
     active: false, startX: 0, startY: 0, tx0: 0, ty0: 0,
   });
