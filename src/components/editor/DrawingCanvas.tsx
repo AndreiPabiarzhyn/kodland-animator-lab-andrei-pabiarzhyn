@@ -191,15 +191,9 @@ export const DrawingCanvas = ({ className }: Props) => {
         } catch { /* ignore */ }
       }
       if (cancelled) return;
-      cacheRef.current = {
-        frameId: frame.id,
-        activeId: frame.activeLayerId,
-        below, active, above,
-      };
-      // Always repaint below/above (never disturbed by user input).
-      paintBelow();
-      paintAbove();
-      // Only repaint live (active) if user is not currently drawing/dragging on it.
+      // If the user is mid-stroke / mid-transform on the active layer, do
+      // NOT replace cacheRef (would lose in-flight pixels). Just refresh
+      // the below/above caches that aren't being mutated.
       const busy =
         drawingRef.current.active ||
         dragRef.current.kind === "shape" ||
@@ -208,7 +202,23 @@ export const DrawingCanvas = ({ className }: Props) => {
         dragRef.current.kind === "resize" ||
         dragRef.current.kind === "rotate" ||
         selectionRef.current !== null;
-      if (!busy) paintActiveToLive();
+      if (busy && cacheRef.current.frameId === frame.id && cacheRef.current.activeId === frame.activeLayerId) {
+        cacheRef.current = {
+          ...cacheRef.current,
+          below, above,
+        };
+        paintBelow();
+        paintAbove();
+        return;
+      }
+      cacheRef.current = {
+        frameId: frame.id,
+        activeId: frame.activeLayerId,
+        below, active, above,
+      };
+      paintBelow();
+      paintAbove();
+      paintActiveToLive();
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -390,44 +400,61 @@ export const DrawingCanvas = ({ className }: Props) => {
 
   // ----- Stroke drawing -----
   const drawStrokeSegment = (
-    ctx: CanvasRenderingContext2D,
+    contexts: CanvasRenderingContext2D[],
     a: { x: number; y: number },
     b: { x: number; y: number },
     erase: boolean,
   ) => {
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = tool.size;
-    if (erase) {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.strokeStyle = "rgba(0,0,0,1)";
-    } else {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = hexToRgba(tool.color, tool.opacity);
+    for (const ctx of contexts) {
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = tool.size;
+      if (erase) {
+        // Full alpha erase — opacity slider intentionally ignored so the
+        // eraser always cleanly removes pixels (matches user expectation).
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.strokeStyle = "rgba(0,0,0,1)";
+        ctx.fillStyle = "rgba(0,0,0,1)";
+      } else {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = hexToRgba(tool.color, tool.opacity);
+        ctx.fillStyle = hexToRgba(tool.color, tool.opacity);
+      }
+      // For zero-length segments (initial click) draw a round dot so a single
+      // tap still erases / paints a visible mark.
+      if (a.x === b.x && a.y === b.y) {
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, Math.max(0.5, tool.size / 2), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
   };
 
   const drawMirroredSegment = (
-    ctx: CanvasRenderingContext2D,
+    contexts: CanvasRenderingContext2D[],
     a: { x: number; y: number },
     b: { x: number; y: number },
+    erase: boolean,
   ) => {
     const w = project.width;
     const h = project.height;
     const axis = tool.mirrorAxis;
-    drawStrokeSegment(ctx, a, b, false);
+    drawStrokeSegment(contexts, a, b, erase);
     if (axis === "horizontal" || axis === "both") {
-      drawStrokeSegment(ctx, { x: w - a.x, y: a.y }, { x: w - b.x, y: b.y }, false);
+      drawStrokeSegment(contexts, { x: w - a.x, y: a.y }, { x: w - b.x, y: b.y }, erase);
     }
     if (axis === "vertical" || axis === "both") {
-      drawStrokeSegment(ctx, { x: a.x, y: h - a.y }, { x: b.x, y: h - b.y }, false);
+      drawStrokeSegment(contexts, { x: a.x, y: h - a.y }, { x: b.x, y: h - b.y }, erase);
     }
     if (axis === "both") {
-      drawStrokeSegment(ctx, { x: w - a.x, y: h - a.y }, { x: w - b.x, y: h - b.y }, false);
+      drawStrokeSegment(contexts, { x: w - a.x, y: h - a.y }, { x: w - b.x, y: h - b.y }, erase);
     }
   };
 
@@ -472,23 +499,47 @@ export const DrawingCanvas = ({ className }: Props) => {
     // live already shows cache.active synchronously; nothing to do.
   };
 
-  const commitLiveStroke = useCallback(() => {
+  /**
+   * Returns the contexts that a freehand stroke (pencil/eraser/mirror) should
+   * draw into. We always draw into the live canvas (for instant feedback)
+   * AND into the cached active-layer offscreen canvas when it matches the
+   * current active layer. This guarantees that:
+   *   - the live preview never diverges from the cache
+   *   - commit reads the authoritative cache.active bitmap
+   *   - eraser strokes stay confined to the active layer
+   */
+  const getStrokeContexts = (): CanvasRenderingContext2D[] => {
+    const out: CanvasRenderingContext2D[] = [];
     const live = liveRef.current;
+    if (live) out.push(live.getContext("2d")!);
+    const c = cacheRef.current;
+    if (
+      c.active &&
+      c.activeId === activeLayer?.id &&
+      c.frameId === frame?.id
+    ) {
+      out.push(c.active.getContext("2d")!);
+    }
+    return out;
+  };
+
+  const commitLiveStroke = useCallback(() => {
     const layerId = drawingRef.current.layerId;
     const frameId = drawingRef.current.frameId;
     const snap = drawingRef.current.startSnapshot ?? undefined;
-    if (live && layerId && frameId) {
-      const dataUrl = live.toDataURL("image/png");
-      // Keep cache.active in sync so the next cache rebuild is a no-op visually
+    if (layerId && frameId) {
+      // Prefer the cache (always in-sync source of truth for the active
+      // layer). Fall back to the live canvas only if cache is stale.
       const c = cacheRef.current;
-      if (c.active && c.activeId === layerId) {
-        const ax = c.active.getContext("2d")!;
-        ax.clearRect(0, 0, c.active.width, c.active.height);
-        ax.drawImage(live, 0, 0);
+      let source: HTMLCanvasElement | null = null;
+      if (c.active && c.activeId === layerId) source = c.active;
+      else source = liveRef.current;
+      if (source) {
+        const dataUrl = source.toDataURL("image/png");
+        const s = useStore.getState();
+        const idx = s.project.frames.findIndex((f) => f.id === frameId);
+        if (idx >= 0) s.updateLayerData(idx, layerId, dataUrl, snap);
       }
-      const s = useStore.getState();
-      const idx = s.project.frames.findIndex((f) => f.id === frameId);
-      s.updateLayerData(idx, layerId, dataUrl, snap);
     }
     drawingRef.current.layerId = null;
     drawingRef.current.frameId = null;
@@ -590,10 +641,9 @@ export const DrawingCanvas = ({ className }: Props) => {
     drawingRef.current.active = true;
     drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     beginLiveStroke();
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
-    if (tool.tool === "mirror") drawMirroredSegment(lctx, p, p);
-    else drawStrokeSegment(lctx, p, p, tool.tool === "eraser");
+    const ctxs = getStrokeContexts();
+    if (tool.tool === "mirror") drawMirroredSegment(ctxs, p, p, false);
+    else drawStrokeSegment(ctxs, p, p, tool.tool === "eraser");
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -664,14 +714,13 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
     if (!drawingRef.current.active) return;
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
+    const ctxs = getStrokeContexts();
     const last = drawingRef.current.last!;
     if (tool.tool === "pencil" || tool.tool === "eraser") {
-      drawStrokeSegment(lctx, last, p, tool.tool === "eraser");
+      drawStrokeSegment(ctxs, last, p, tool.tool === "eraser");
       drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     } else if (tool.tool === "mirror") {
-      drawMirroredSegment(lctx, last, p);
+      drawMirroredSegment(ctxs, last, p, false);
       drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     }
   };
