@@ -339,10 +339,17 @@ export const DrawingCanvas = ({ className }: Props) => {
     layerCv.width = project.width;
     layerCv.height = project.height;
     const lctx = layerCv.getContext("2d")!;
-    try {
-      const img = await loadImage(activeLayer.dataUrl);
-      lctx.drawImage(img, 0, 0);
-    } catch { /* ignore */ }
+    // Use cache.active (already holed at marquee time) as authoritative
+    // base — fully in sync with what the user sees, no async race.
+    const cache = cacheRef.current;
+    if (cache.active && cache.activeId === activeLayer.id) {
+      lctx.drawImage(cache.active, 0, 0);
+    } else {
+      try {
+        const img = await loadImage(activeLayer.dataUrl);
+        lctx.drawImage(img, 0, 0);
+      } catch { /* ignore */ }
+    }
     lctx.save();
     lctx.translate(selection.cx, selection.cy);
     lctx.rotate(selection.rot);
@@ -352,15 +359,32 @@ export const DrawingCanvas = ({ className }: Props) => {
     off.getContext("2d")!.putImageData(selection.imageData, 0, 0);
     lctx.drawImage(off, -selection.w / 2, -selection.h / 2, selection.w, selection.h);
     lctx.restore();
-    updateActiveLayerData(layerCv.toDataURL("image/png"), selection.baseSnapshot);
+    // Sync cache.active + live BEFORE store update so canvas updates instantly.
+    if (cache.active && cache.activeId === activeLayer.id) {
+      const actx = cache.active.getContext("2d")!;
+      actx.clearRect(0, 0, cache.active.width, cache.active.height);
+      actx.drawImage(layerCv, 0, 0);
+    }
     setSelection(null);
-  }, [selection, activeLayer, project.width, project.height, updateActiveLayerData]);
+    paintActiveToLive();
+    updateActiveLayerData(layerCv.toDataURL("image/png"), selection.baseSnapshot);
+  }, [selection, activeLayer, project.width, project.height, updateActiveLayerData, paintActiveToLive]);
 
   const cancelSelection = useCallback(() => {
     if (!selection) return;
-    updateActiveLayerData(selection.baseSnapshot);
+    const cache = cacheRef.current;
+    const baseSnap = selection.baseSnapshot;
+    if (cache.active && activeLayer && cache.activeId === activeLayer.id) {
+      loadImage(baseSnap).then((img) => {
+        const actx = cache.active!.getContext("2d")!;
+        actx.clearRect(0, 0, cache.active!.width, cache.active!.height);
+        actx.drawImage(img, 0, 0);
+        paintActiveToLive();
+      }).catch(() => { /* ignore */ });
+    }
     setSelection(null);
-  }, [selection, updateActiveLayerData]);
+    updateActiveLayerData(baseSnap);
+  }, [selection, activeLayer, updateActiveLayerData, paintActiveToLive]);
 
   useEffect(() => {
     if (!selection) return;
