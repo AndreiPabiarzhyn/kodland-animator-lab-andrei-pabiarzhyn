@@ -191,15 +191,9 @@ export const DrawingCanvas = ({ className }: Props) => {
         } catch { /* ignore */ }
       }
       if (cancelled) return;
-      cacheRef.current = {
-        frameId: frame.id,
-        activeId: frame.activeLayerId,
-        below, active, above,
-      };
-      // Always repaint below/above (never disturbed by user input).
-      paintBelow();
-      paintAbove();
-      // Only repaint live (active) if user is not currently drawing/dragging on it.
+      // If the user is mid-stroke / mid-transform on the active layer, do
+      // NOT replace cacheRef (would lose in-flight pixels). Just refresh
+      // the below/above caches that aren't being mutated.
       const busy =
         drawingRef.current.active ||
         dragRef.current.kind === "shape" ||
@@ -208,7 +202,23 @@ export const DrawingCanvas = ({ className }: Props) => {
         dragRef.current.kind === "resize" ||
         dragRef.current.kind === "rotate" ||
         selectionRef.current !== null;
-      if (!busy) paintActiveToLive();
+      if (busy && cacheRef.current.frameId === frame.id && cacheRef.current.activeId === frame.activeLayerId) {
+        cacheRef.current = {
+          ...cacheRef.current,
+          below, above,
+        };
+        paintBelow();
+        paintAbove();
+        return;
+      }
+      cacheRef.current = {
+        frameId: frame.id,
+        activeId: frame.activeLayerId,
+        below, active, above,
+      };
+      paintBelow();
+      paintAbove();
+      paintActiveToLive();
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
