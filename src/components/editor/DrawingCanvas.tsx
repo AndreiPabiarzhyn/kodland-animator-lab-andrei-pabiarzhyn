@@ -781,19 +781,30 @@ export const DrawingCanvas = ({ className }: Props) => {
       // Reset live to active baseline
       paintActiveToLive();
       if (w < 4 || h < 4 || !activeLayer) return;
+      const cw = Math.min(w, project.width - x);
+      const ch = Math.min(h, project.height - y);
+      const baseSnapshot = activeLayer.dataUrl;
+      // Build the holed-out layer from cache.active (sync, in-sync source)
       const layerCv = document.createElement("canvas");
       layerCv.width = project.width;
       layerCv.height = project.height;
       const lctx = layerCv.getContext("2d")!;
-      try {
-        const img = await loadImage(activeLayer.dataUrl);
-        lctx.drawImage(img, 0, 0);
-      } catch { /* ignore */ }
-      const cw = Math.min(w, project.width - x);
-      const ch = Math.min(h, project.height - y);
+      const cache = cacheRef.current;
+      if (cache.active && cache.activeId === activeLayer.id) {
+        lctx.drawImage(cache.active, 0, 0);
+      } else {
+        try {
+          const img = await loadImage(activeLayer.dataUrl);
+          lctx.drawImage(img, 0, 0);
+        } catch { /* ignore */ }
+      }
       const imageData = lctx.getImageData(x, y, cw, ch);
-      const baseSnapshot = activeLayer.dataUrl;
       lctx.clearRect(x, y, cw, ch);
+      // Sync cache.active immediately so the overlay sees the hole.
+      if (cache.active && cache.activeId === activeLayer.id) {
+        const actx = cache.active.getContext("2d")!;
+        actx.clearRect(x, y, cw, ch);
+      }
       updateActiveLayerData(layerCv.toDataURL("image/png"), baseSnapshot);
       setSelection({
         sx: x, sy: y, sw: cw, sh: ch,
