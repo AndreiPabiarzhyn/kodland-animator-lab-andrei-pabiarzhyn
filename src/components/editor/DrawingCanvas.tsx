@@ -489,23 +489,47 @@ export const DrawingCanvas = ({ className }: Props) => {
     // live already shows cache.active synchronously; nothing to do.
   };
 
-  const commitLiveStroke = useCallback(() => {
+  /**
+   * Returns the contexts that a freehand stroke (pencil/eraser/mirror) should
+   * draw into. We always draw into the live canvas (for instant feedback)
+   * AND into the cached active-layer offscreen canvas when it matches the
+   * current active layer. This guarantees that:
+   *   - the live preview never diverges from the cache
+   *   - commit reads the authoritative cache.active bitmap
+   *   - eraser strokes stay confined to the active layer
+   */
+  const getStrokeContexts = (): CanvasRenderingContext2D[] => {
+    const out: CanvasRenderingContext2D[] = [];
     const live = liveRef.current;
+    if (live) out.push(live.getContext("2d")!);
+    const c = cacheRef.current;
+    if (
+      c.active &&
+      c.activeId === activeLayer?.id &&
+      c.frameId === frame?.id
+    ) {
+      out.push(c.active.getContext("2d")!);
+    }
+    return out;
+  };
+
+  const commitLiveStroke = useCallback(() => {
     const layerId = drawingRef.current.layerId;
     const frameId = drawingRef.current.frameId;
     const snap = drawingRef.current.startSnapshot ?? undefined;
-    if (live && layerId && frameId) {
-      const dataUrl = live.toDataURL("image/png");
-      // Keep cache.active in sync so the next cache rebuild is a no-op visually
+    if (layerId && frameId) {
+      // Prefer the cache (always in-sync source of truth for the active
+      // layer). Fall back to the live canvas only if cache is stale.
       const c = cacheRef.current;
-      if (c.active && c.activeId === layerId) {
-        const ax = c.active.getContext("2d")!;
-        ax.clearRect(0, 0, c.active.width, c.active.height);
-        ax.drawImage(live, 0, 0);
+      let source: HTMLCanvasElement | null = null;
+      if (c.active && c.activeId === layerId) source = c.active;
+      else source = liveRef.current;
+      if (source) {
+        const dataUrl = source.toDataURL("image/png");
+        const s = useStore.getState();
+        const idx = s.project.frames.findIndex((f) => f.id === frameId);
+        if (idx >= 0) s.updateLayerData(idx, layerId, dataUrl, snap);
       }
-      const s = useStore.getState();
-      const idx = s.project.frames.findIndex((f) => f.id === frameId);
-      s.updateLayerData(idx, layerId, dataUrl, snap);
     }
     drawingRef.current.layerId = null;
     drawingRef.current.frameId = null;
