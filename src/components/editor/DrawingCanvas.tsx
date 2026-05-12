@@ -631,10 +631,9 @@ export const DrawingCanvas = ({ className }: Props) => {
     drawingRef.current.active = true;
     drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     beginLiveStroke();
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
-    if (tool.tool === "mirror") drawMirroredSegment(lctx, p, p);
-    else drawStrokeSegment(lctx, p, p, tool.tool === "eraser");
+    const ctxs = getStrokeContexts();
+    if (tool.tool === "mirror") drawMirroredSegment(ctxs, p, p, false);
+    else drawStrokeSegment(ctxs, p, p, tool.tool === "eraser");
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -705,14 +704,13 @@ export const DrawingCanvas = ({ className }: Props) => {
       return;
     }
     if (!drawingRef.current.active) return;
-    const live = liveRef.current!;
-    const lctx = live.getContext("2d")!;
+    const ctxs = getStrokeContexts();
     const last = drawingRef.current.last!;
     if (tool.tool === "pencil" || tool.tool === "eraser") {
-      drawStrokeSegment(lctx, last, p, tool.tool === "eraser");
+      drawStrokeSegment(ctxs, last, p, tool.tool === "eraser");
       drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     } else if (tool.tool === "mirror") {
-      drawMirroredSegment(lctx, last, p);
+      drawMirroredSegment(ctxs, last, p, false);
       drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
     }
   };
