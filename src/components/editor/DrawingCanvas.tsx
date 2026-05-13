@@ -286,39 +286,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     off.getContext("2d")!.putImageData(selection.imageData, 0, 0);
     ctx.drawImage(off, -selection.w / 2, -selection.h / 2, selection.w, selection.h);
     ctx.restore();
-
-    ctx.save();
-    ctx.translate(selection.cx, selection.cy);
-    ctx.rotate(selection.rot);
-    const hx = selection.w / 2;
-    const hy = selection.h / 2;
-    ctx.lineWidth = 2 / view.scale;
-    ctx.setLineDash([6 / view.scale, 4 / view.scale]);
-    ctx.strokeStyle = "hsl(195 90% 55%)";
-    ctx.strokeRect(-hx, -hy, selection.w, selection.h);
-    ctx.setLineDash([]);
-    const handleSize = 10 / view.scale;
-    const handles: Array<[number, number]> = [
-      [-hx, -hy], [0, -hy], [hx, -hy],
-      [-hx, 0], [hx, 0],
-      [-hx, hy], [0, hy], [hx, hy],
-    ];
-    ctx.fillStyle = "white";
-    ctx.strokeStyle = "hsl(195 90% 45%)";
-    for (const [x, y] of handles) {
-      ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
-      ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
-    }
-    ctx.beginPath();
-    ctx.moveTo(0, -hy);
-    ctx.lineTo(0, -hy - 24 / view.scale);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, -hy - 24 / view.scale, 6 / view.scale, 0, Math.PI * 2);
-    ctx.fillStyle = "hsl(195 90% 55%)";
-    ctx.fill();
-    ctx.restore();
-  }, [selection, view.scale]);
+  }, [selection]);
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
@@ -768,6 +736,12 @@ export const DrawingCanvas = ({ className }: Props) => {
       const cache = cacheRef.current;
       if (cache.active) lctx.drawImage(cache.active, 0, 0);
       renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
+      // Also bake the shape into cache.active so commitLiveStroke reads
+      // the up-to-date pixels (otherwise the shape disappears on release).
+      if (cache.active && cache.activeId === activeLayer?.id) {
+        const actx = cache.active.getContext("2d")!;
+        renderShape(actx, dr.shape, dr.x0, dr.y0, p.x, p.y);
+      }
       commitLiveStroke();
       return;
     }
@@ -928,9 +902,10 @@ export const DrawingCanvas = ({ className }: Props) => {
   return (
     <div
       ref={wrapRef}
-      className={"relative overflow-hidden bg-canvas " + (className ?? "")}
+      className={"relative overflow-hidden bg-canvas select-none " + (className ?? "")}
       onWheel={onWheel}
       onPointerLeave={() => setCursorPos(null)}
+      onDragStart={(e) => e.preventDefault()}
     >
       <div
         className="absolute left-1/2 top-1/2"
@@ -944,10 +919,12 @@ export const DrawingCanvas = ({ className }: Props) => {
         <canvas
           ref={onionRef}
           className="absolute inset-0 w-full h-full pointer-events-none rounded-lg"
+          draggable={false}
         />
         <canvas
           ref={belowRef}
           className="absolute inset-0 w-full h-full pointer-events-none rounded-lg"
+          draggable={false}
         />
         <canvas
           ref={liveRef}
@@ -955,16 +932,84 @@ export const DrawingCanvas = ({ className }: Props) => {
           height={project.height}
           className="absolute inset-0 w-full h-full rounded-lg touch-none"
           style={{ cursor: cursorStyle }}
+          draggable={false}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
         />
         <canvas
           ref={aboveRef}
           className="absolute inset-0 w-full h-full pointer-events-none rounded-lg"
+          draggable={false}
         />
+        {selection && (
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            width={cssW}
+            height={cssH}
+            viewBox={`0 0 ${project.width} ${project.height}`}
+            style={{ overflow: "visible" }}
+          >
+            <g transform={`translate(${selection.cx} ${selection.cy}) rotate(${(selection.rot * 180) / Math.PI})`}>
+              {(() => {
+                const hx = selection.w / 2;
+                const hy = selection.h / 2;
+                const sw = 2 / view.scale;
+                const dash = `${6 / view.scale} ${4 / view.scale}`;
+                const hs = 10 / view.scale;
+                const rOffset = 24 / view.scale;
+                const handles: Array<[number, number]> = [
+                  [-hx, -hy], [0, -hy], [hx, -hy],
+                  [-hx, 0], [hx, 0],
+                  [-hx, hy], [0, hy], [hx, hy],
+                ];
+                return (
+                  <>
+                    <rect
+                      x={-hx}
+                      y={-hy}
+                      width={selection.w}
+                      height={selection.h}
+                      fill="none"
+                      stroke="hsl(195 90% 55%)"
+                      strokeWidth={sw}
+                      strokeDasharray={dash}
+                    />
+                    <line
+                      x1={0}
+                      y1={-hy}
+                      x2={0}
+                      y2={-hy - rOffset}
+                      stroke="hsl(195 90% 55%)"
+                      strokeWidth={sw}
+                    />
+                    <circle
+                      cx={0}
+                      cy={-hy - rOffset}
+                      r={6 / view.scale}
+                      fill="hsl(195 90% 55%)"
+                    />
+                    {handles.map(([x, y], i) => (
+                      <rect
+                        key={i}
+                        x={x - hs / 2}
+                        y={y - hs / 2}
+                        width={hs}
+                        height={hs}
+                        fill="white"
+                        stroke="hsl(195 90% 45%)"
+                        strokeWidth={sw}
+                      />
+                    ))}
+                  </>
+                );
+              })()}
+            </g>
+          </svg>
+        )}
         {showRing && cursorPos && (
           <div
             className="absolute pointer-events-none rounded-full border-2 border-foreground/80 mix-blend-difference"
