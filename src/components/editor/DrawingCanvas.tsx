@@ -768,6 +768,12 @@ export const DrawingCanvas = ({ className }: Props) => {
       const cache = cacheRef.current;
       if (cache.active) lctx.drawImage(cache.active, 0, 0);
       renderShape(lctx, dr.shape, dr.x0, dr.y0, p.x, p.y);
+      // Also bake the shape into cache.active so commitLiveStroke reads
+      // the up-to-date pixels (otherwise the shape disappears on release).
+      if (cache.active && cache.activeId === activeLayer?.id) {
+        const actx = cache.active.getContext("2d")!;
+        renderShape(actx, dr.shape, dr.x0, dr.y0, p.x, p.y);
+      }
       commitLiveStroke();
       return;
     }
