@@ -286,39 +286,7 @@ export const DrawingCanvas = ({ className }: Props) => {
     off.getContext("2d")!.putImageData(selection.imageData, 0, 0);
     ctx.drawImage(off, -selection.w / 2, -selection.h / 2, selection.w, selection.h);
     ctx.restore();
-
-    ctx.save();
-    ctx.translate(selection.cx, selection.cy);
-    ctx.rotate(selection.rot);
-    const hx = selection.w / 2;
-    const hy = selection.h / 2;
-    ctx.lineWidth = 2 / view.scale;
-    ctx.setLineDash([6 / view.scale, 4 / view.scale]);
-    ctx.strokeStyle = "hsl(195 90% 55%)";
-    ctx.strokeRect(-hx, -hy, selection.w, selection.h);
-    ctx.setLineDash([]);
-    const handleSize = 10 / view.scale;
-    const handles: Array<[number, number]> = [
-      [-hx, -hy], [0, -hy], [hx, -hy],
-      [-hx, 0], [hx, 0],
-      [-hx, hy], [0, hy], [hx, hy],
-    ];
-    ctx.fillStyle = "white";
-    ctx.strokeStyle = "hsl(195 90% 45%)";
-    for (const [x, y] of handles) {
-      ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
-      ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
-    }
-    ctx.beginPath();
-    ctx.moveTo(0, -hy);
-    ctx.lineTo(0, -hy - 24 / view.scale);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, -hy - 24 / view.scale, 6 / view.scale, 0, Math.PI * 2);
-    ctx.fillStyle = "hsl(195 90% 55%)";
-    ctx.fill();
-    ctx.restore();
-  }, [selection, view.scale]);
+  }, [selection]);
 
   useEffect(() => { renderSelectionOverlay(); }, [renderSelectionOverlay]);
 
