@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.2",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "kodflip-mcp",
+      "version": "0.1.0",
+      "title": "KodFlip Animation Studio"
+    },
+    "tools": [
+      {
+        "name": "get_app_info",
+        "title": "Get app info",
+        "description": "Returns metadata about KodFlip — a frame-by-frame 2D animation studio for kids: name, description, supported export formats, and canvas capabilities.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_keyboard_shortcuts",
+        "title": "List keyboard shortcuts",
+        "description": "Returns the full list of keyboard shortcuts available in the KodFlip animation editor.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_animation_tips",
+        "title": "Get animation tips",
+        "description": "Returns short, kid-friendly frame-by-frame animation tips grouped by topic (basics, timing, drawing, export).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "enum": [
+                "basics",
+                "timing",
+                "drawing",
+                "export",
+                "all"
+              ],
+              "default": "all",
+              "description": "Which tip category to return."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
