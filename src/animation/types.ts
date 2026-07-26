@@ -3,6 +3,7 @@ export type ToolId =
   | "eraser"
   | "fill"
   | "select"
+  | "lasso"
   | "eyedropper"
   | "mirror"
   | "rectangle"

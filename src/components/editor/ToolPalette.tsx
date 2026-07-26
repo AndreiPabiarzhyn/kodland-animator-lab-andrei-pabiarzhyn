@@ -1,4 +1,4 @@
-import { Eraser, PaintBucket, Pipette, Pencil, BoxSelect, FlipHorizontal, Square, Circle, Minus, Hand } from "lucide-react";
+import { Eraser, PaintBucket, Pipette, Pencil, BoxSelect, Lasso, FlipHorizontal, Square, Circle, Minus, Hand } from "lucide-react";
 import { ToolId } from "@/animation/types";
 import { useStore } from "@/animation/store";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,6 +14,7 @@ const TOOLS: Array<{ id: ToolId; label: TranslationKey; key: string; icon: React
   { id: "circle", label: "ellipse", key: "C", icon: Circle },
   { id: "line", label: "line", key: "L", icon: Minus },
   { id: "select", label: "selectTransform", key: "S", icon: BoxSelect },
+  { id: "lasso", label: "lassoSelect", key: "Shift+S", icon: Lasso },
   { id: "eyedropper", label: "colorPicker", key: "I", icon: Pipette },
   { id: "pan", label: "movePan", key: "H", icon: Hand },
 ];

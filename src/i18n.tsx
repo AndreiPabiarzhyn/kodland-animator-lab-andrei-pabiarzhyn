@@ -21,7 +21,7 @@ export type TranslationKey =
   | "pngSequence" | "saveProject" | "openProject" | "importImage" | "help" | "toggleTheme" | "newAnimation"
   | "chooseCanvas" | "width" | "height" | "cancel" | "create" | "keyboardShortcuts" | "speedWorkflow"
   | "createdBy" | "version" | "projectVersion" | "savedAt" | "language" | "pencil" | "eraser" | "mirrorPen" | "rectangle" | "ellipse"
-  | "line" | "selectTransform" | "colorPicker" | "movePan" | "pickCustomColor" | "brushSize" | "addLayer"
+  | "line" | "selectTransform" | "selectRectangle" | "selectLasso" | "lassoSelect" | "colorPicker" | "movePan" | "pickCustomColor" | "brushSize" | "addLayer"
   | "duplicateLayer" | "deleteLayer" | "hideLayer" | "showLayer" | "renameLayer" | "gifExported" | "gifExportFailed"
   | "pngSaved" | "exportFailed" | "projectLoaded" | "projectLoadFailed" | "imageImported" | "imageImportFailed"
   | "newProjectCreated" | "renderingGif" | "zippingPngs" | "helpDrawing" | "helpDrawingText" | "helpFrames" | "helpFramesText"
@@ -39,7 +39,7 @@ const en: Dictionary = {
   help: "Help", toggleTheme: "Toggle theme", newAnimation: "New animation", chooseCanvas: "Choose your canvas size. You can change it any time.",
   width: "Width", height: "Height", cancel: "Cancel", create: "Create", keyboardShortcuts: "Keyboard shortcuts", speedWorkflow: "Speed up your workflow!",
   createdBy: "Created by", version: "Application version 0.202", projectVersion: "Project", savedAt: "Saved", language: "Language", pencil: "Pencil", eraser: "Eraser", mirrorPen: "Mirror Pen",
-  rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", selectTransform: "Select / Transform", colorPicker: "Color Picker", movePan: "Move / Pan",
+  rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", selectTransform: "Select / Transform", selectRectangle: "Rectangle select", selectLasso: "Freehand lasso select", lassoSelect: "Lasso select", colorPicker: "Color Picker", movePan: "Move / Pan",
   pickCustomColor: "Pick custom color", brushSize: "Brush size", addLayer: "Add layer", duplicateLayer: "Duplicate layer", deleteLayer: "Delete layer",
   hideLayer: "Hide layer", showLayer: "Show layer", renameLayer: "Double-click to rename", gifExported: "GIF exported!", gifExportFailed: "GIF export failed",
   pngSaved: "PNG sequence saved!", exportFailed: "Export failed", projectLoaded: "Project loaded", projectLoadFailed: "Could not load project",

@@ -14,11 +14,12 @@ type Selection = {
   rot: number;
   imageData: ImageData;
   baseSnapshot: string;
+  path?: Array<{ x: number; y: number }>;
 };
 
 type DragMode =
   | { kind: "none" }
-  | { kind: "marquee"; x0: number; y0: number }
+  | { kind: "marquee"; x0: number; y0: number; points: Array<{ x: number; y: number }> }
   | { kind: "move"; ox: number; oy: number; cx0: number; cy0: number }
   | { kind: "resize"; handle: string; ox: number; oy: number; w0: number; h0: number; cx0: number; cy0: number }
   | { kind: "rotate"; ox: number; oy: number; rot0: number; cx: number; cy: number }
@@ -576,7 +577,7 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     if (!activeLayer || !frame) return;
 
-    if (tool.tool === "select") {
+    if (tool.tool === "select" || tool.tool === "lasso") {
       const hit = hitTestSelection(p);
       if (selection && hit) {
         if (hit === "move") {
@@ -594,7 +595,10 @@ export const DrawingCanvas = ({ className }: Props) => {
         return;
       }
       if (selection) await commitSelection();
-      dragRef.current = { kind: "marquee", x0: p.x, y0: p.y };
+      dragRef.current = {
+        kind: "marquee", x0: p.x, y0: p.y,
+        points: [{ x: p.x, y: p.y }],
+      };
       return;
     }
 
@@ -665,17 +669,26 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     const dr = dragRef.current;
     if (dr.kind === "marquee") {
+      if (tool.tool === "lasso") {
+        dr.points.push(p);
+      }
       const live = liveRef.current!;
       const ctx = live.getContext("2d")!;
       ctx.clearRect(0, 0, live.width, live.height);
       const c = cacheRef.current;
       if (c.active) ctx.drawImage(c.active, 0, 0);
-      const x = Math.min(dr.x0, p.x), y = Math.min(dr.y0, p.y);
-      const w = Math.abs(p.x - dr.x0), h = Math.abs(p.y - dr.y0);
       ctx.lineWidth = 2 / view.scale;
       ctx.setLineDash([6 / view.scale, 4 / view.scale]);
       ctx.strokeStyle = "hsl(195 90% 55%)";
-      ctx.strokeRect(x, y, w, h);
+      if (tool.tool === "lasso") {
+        ctx.beginPath();
+        dr.points.forEach((point, i) => i === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y));
+        ctx.stroke();
+      } else {
+        const x = Math.min(dr.x0, p.x), y = Math.min(dr.y0, p.y);
+        const w = Math.abs(p.x - dr.x0), h = Math.abs(p.y - dr.y0);
+        ctx.strokeRect(x, y, w, h);
+      }
       ctx.setLineDash([]);
       return;
     }
@@ -760,10 +773,15 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     if (dr.kind === "marquee") {
       const p = getCanvasPoint(e.clientX, e.clientY);
-      const x = Math.max(0, Math.floor(Math.min(dr.x0, p.x)));
-      const y = Math.max(0, Math.floor(Math.min(dr.y0, p.y)));
-      const w = Math.floor(Math.abs(p.x - dr.x0));
-      const h = Math.floor(Math.abs(p.y - dr.y0));
+      const points = tool.tool === "lasso"
+        ? [...dr.points, p]
+        : [{ x: dr.x0, y: dr.y0 }, { x: p.x, y: dr.y0 }, { x: p.x, y: p.y }, { x: dr.x0, y: p.y }];
+      const x = Math.max(0, Math.floor(Math.min(...points.map((point) => point.x))));
+      const y = Math.max(0, Math.floor(Math.min(...points.map((point) => point.y))));
+      const right = Math.min(project.width, Math.ceil(Math.max(...points.map((point) => point.x))));
+      const bottom = Math.min(project.height, Math.ceil(Math.max(...points.map((point) => point.y))));
+      const w = right - x;
+      const h = bottom - y;
       // Reset live to active baseline
       paintActiveToLive();
       if (w < 4 || h < 4 || !activeLayer) return;
@@ -784,12 +802,39 @@ export const DrawingCanvas = ({ className }: Props) => {
           lctx.drawImage(img, 0, 0);
         } catch { /* ignore */ }
       }
-      const imageData = lctx.getImageData(x, y, cw, ch);
-      lctx.clearRect(x, y, cw, ch);
+      let imageData: ImageData;
+      if (tool.tool === "lasso") {
+        const mask = document.createElement("canvas");
+        mask.width = cw; mask.height = ch;
+        const mctx = mask.getContext("2d")!;
+        mctx.beginPath();
+        points.forEach((point, i) => i === 0
+          ? mctx.moveTo(point.x - x, point.y - y)
+          : mctx.lineTo(point.x - x, point.y - y));
+        mctx.closePath();
+        mctx.clip();
+        mctx.drawImage(layerCv, -x, -y);
+        imageData = mctx.getImageData(0, 0, cw, ch);
+        lctx.save();
+        lctx.beginPath();
+        points.forEach((point, i) => i === 0 ? lctx.moveTo(point.x, point.y) : lctx.lineTo(point.x, point.y));
+        lctx.closePath();
+        lctx.clip();
+        lctx.clearRect(x, y, cw, ch);
+        lctx.restore();
+      } else {
+        imageData = lctx.getImageData(x, y, cw, ch);
+        lctx.clearRect(x, y, cw, ch);
+      }
       // Sync cache.active immediately so the overlay sees the hole.
       if (cache.active && cache.activeId === activeLayer.id) {
         const actx = cache.active.getContext("2d")!;
-        actx.clearRect(x, y, cw, ch);
+        if (tool.tool === "lasso") {
+          actx.clearRect(0, 0, cache.active.width, cache.active.height);
+          actx.drawImage(layerCv, 0, 0);
+        } else {
+          actx.clearRect(x, y, cw, ch);
+        }
       }
       updateActiveLayerData(layerCv.toDataURL("image/png"), baseSnapshot);
       setSelection({
@@ -797,6 +842,9 @@ export const DrawingCanvas = ({ className }: Props) => {
         cx: x + cw / 2, cy: y + ch / 2,
         w: cw, h: ch, rot: 0,
         imageData, baseSnapshot,
+        path: tool.tool === "lasso"
+          ? points.map((point) => ({ x: point.x - (x + cw / 2), y: point.y - (y + ch / 2) }))
+          : undefined,
       });
       return;
     }
@@ -905,7 +953,7 @@ export const DrawingCanvas = ({ className }: Props) => {
   const cursorStyle =
     tool.tool === "pan"
       ? (panActive ? "grabbing" : "grab")
-      : tool.tool === "select" ? "default"
+      : tool.tool === "select" || tool.tool === "lasso" ? "default"
       : tool.tool === "eyedropper" ? "crosshair"
       : tool.tool === "fill" ? "cell"
       : tool.tool === "rectangle" || tool.tool === "circle" || tool.tool === "line" ? "crosshair"
@@ -980,16 +1028,28 @@ export const DrawingCanvas = ({ className }: Props) => {
                 ];
                 return (
                   <>
-                    <rect
-                      x={-hx}
-                      y={-hy}
-                      width={selection.w}
-                      height={selection.h}
-                      fill="none"
-                      stroke="hsl(195 90% 55%)"
-                      strokeWidth={sw}
-                      strokeDasharray={dash}
-                    />
+                    {selection.path ? (
+                      <polygon
+                        points={selection.path
+                          .map((point) => `${point.x * (selection.w / selection.sw)},${point.y * (selection.h / selection.sh)}`)
+                          .join(" ")}
+                        fill="none"
+                        stroke="hsl(195 90% 55%)"
+                        strokeWidth={sw}
+                        strokeDasharray={dash}
+                      />
+                    ) : (
+                      <rect
+                        x={-hx}
+                        y={-hy}
+                        width={selection.w}
+                        height={selection.h}
+                        fill="none"
+                        stroke="hsl(195 90% 55%)"
+                        strokeWidth={sw}
+                        strokeDasharray={dash}
+                      />
+                    )}
                     <line
                       x1={0}
                       y1={-hy}
