@@ -22,7 +22,7 @@ export type TranslationKey =
   | "chooseCanvas" | "width" | "height" | "cancel" | "create" | "keyboardShortcuts" | "speedWorkflow"
   | "createdBy" | "version" | "projectVersion" | "savedAt" | "language" | "pencil" | "eraser" | "mirrorPen" | "rectangle" | "ellipse"
   | "line" | "selectTransform" | "selectRectangle" | "selectLasso" | "lassoSelect" | "colorPicker" | "movePan" | "pickCustomColor" | "brushSize" | "addLayer"
-  | "duplicateLayer" | "deleteLayer" | "hideLayer" | "showLayer" | "renameLayer" | "gifExported" | "gifExportFailed"
+  | "duplicateLayer" | "deleteLayer" | "hideLayer" | "showLayer" | "renameLayer" | "moveLayerUp" | "moveLayerDown" | "activeLayer" | "topLayer" | "bottomLayer" | "gifExported" | "gifExportFailed"
   | "pngSaved" | "exportFailed" | "projectLoaded" | "projectLoadFailed" | "imageImported" | "imageImportFailed"
   | "newProjectCreated" | "renderingGif" | "zippingPngs" | "helpDrawing" | "helpDrawingText" | "helpFrames" | "helpFramesText"
   | "helpNavigation" | "helpNavigationText" | "helpEditing" | "helpEditingText" | "prevNext" | "panCanvas" | "applyCancel" | "toolSize";
@@ -41,7 +41,7 @@ const en: Dictionary = {
   createdBy: "Created by", version: "Application version 0.202", projectVersion: "Project", savedAt: "Saved", language: "Language", pencil: "Pencil", eraser: "Eraser", mirrorPen: "Mirror Pen",
   rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", selectTransform: "Select / Transform", selectRectangle: "Rectangle select", selectLasso: "Freehand lasso select", lassoSelect: "Lasso select", colorPicker: "Color Picker", movePan: "Move / Pan",
   pickCustomColor: "Pick custom color", brushSize: "Brush size", addLayer: "Add layer", duplicateLayer: "Duplicate layer", deleteLayer: "Delete layer",
-  hideLayer: "Hide layer", showLayer: "Show layer", renameLayer: "Double-click to rename", gifExported: "GIF exported!", gifExportFailed: "GIF export failed",
+  hideLayer: "Hide layer", showLayer: "Show layer", renameLayer: "Double-click to rename", moveLayerUp: "Move layer up", moveLayerDown: "Move layer down", activeLayer: "Active", topLayer: "Top", bottomLayer: "Bottom", gifExported: "GIF exported!", gifExportFailed: "GIF export failed",
   pngSaved: "PNG sequence saved!", exportFailed: "Export failed", projectLoaded: "Project loaded", projectLoadFailed: "Could not load project",
   imageImported: "Image imported as frame", imageImportFailed: "Could not import image", newProjectCreated: "New project!", renderingGif: "Rendering GIF…", zippingPngs: "Zipping PNGs…",
   helpDrawing: "Drawing", helpDrawingText: "Choose a tool, color, size, and opacity, then draw directly on the canvas.", helpFrames: "Frames", helpFramesText: "Add a blank frame or duplicate the current frame to keep its layers and continue the animation.",

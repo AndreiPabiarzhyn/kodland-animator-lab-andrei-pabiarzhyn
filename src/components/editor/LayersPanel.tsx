@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useStore } from "@/animation/store";
-import { Eye, EyeOff, Plus, Copy, Trash2, GripVertical } from "lucide-react";
+import { Eye, EyeOff, Plus, Copy, Trash2, GripVertical, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -52,10 +52,15 @@ export const LayersPanel = () => {
           </Button>
         </div>
       </div>
-      <div className="flex flex-col gap-1 max-h-64 overflow-y-auto scrollbar-thin">
+      <div className="flex items-center justify-between px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        <span>{t("topLayer")}</span>
+        <span>{t("bottomLayer")}</span>
+      </div>
+      <div className="flex flex-col gap-1 max-h-80 overflow-y-auto scrollbar-thin">
         {display.map(({ layer, i }) => {
           const active = layer.id === frame.activeLayerId;
           const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
+          const displayOrder = frame.layers.length - i;
           return (
             <div
               key={layer.id}
@@ -70,7 +75,7 @@ export const LayersPanel = () => {
               onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
               onClick={() => setActive(layer.id)}
               className={cn(
-                "group flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-pointer transition-colors border",
+                "group flex items-center gap-1.5 rounded-lg px-2 py-2 cursor-pointer transition-colors border",
                 active
                   ? "bg-primary/10 border-primary"
                   : "bg-card border-transparent hover:bg-muted",
@@ -78,6 +83,9 @@ export const LayersPanel = () => {
               )}
             >
               <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="w-5 text-center text-[10px] font-black text-muted-foreground tabular-nums" title={`Layer ${displayOrder}`}>
+                {displayOrder}
+              </span>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleVisible(layer.id); }}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
@@ -85,7 +93,7 @@ export const LayersPanel = () => {
               >
                 {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4 opacity-50" />}
               </button>
-              <div className="h-7 w-9 rounded checkerboard relative overflow-hidden shrink-0 border border-border">
+              <div className="h-9 w-12 rounded checkerboard relative overflow-hidden shrink-0 border border-border">
                 <img src={layer.dataUrl} alt="" className="absolute inset-0 w-full h-full object-contain" draggable={false} />
               </div>
               {editingId === layer.id ? (
@@ -104,9 +112,32 @@ export const LayersPanel = () => {
                   className={cn("flex-1 text-left text-xs truncate font-semibold", !layer.visible && "opacity-50")}
                    title={t("renameLayer")}
                 >
-                  {layer.name}
+                  <span className="block">{layer.name}</span>
+                  {active && <span className="block text-[9px] uppercase tracking-wider text-primary">{t("activeLayer")}</span>}
                 </button>
               )}
+              <div className="flex shrink-0 flex-col opacity-60 group-hover:opacity-100">
+                <button
+                  type="button"
+                  disabled={i === frame.layers.length - 1}
+                  onClick={(e) => { e.stopPropagation(); moveLayer(i, i + 1); }}
+                  className="h-4 w-5 rounded hover:bg-muted disabled:invisible"
+                  aria-label={t("moveLayerUp")}
+                  title={t("moveLayerUp")}
+                >
+                  <ChevronUp className="mx-auto h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={(e) => { e.stopPropagation(); moveLayer(i, i - 1); }}
+                  className="h-4 w-5 rounded hover:bg-muted disabled:invisible"
+                  aria-label={t("moveLayerDown")}
+                  title={t("moveLayerDown")}
+                >
+                  <ChevronDown className="mx-auto h-3 w-3" />
+                </button>
+              </div>
             </div>
           );
         })}
