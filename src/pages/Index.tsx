@@ -8,6 +8,7 @@ import { LayersPanel } from "@/components/editor/LayersPanel";
 import { PreviewPanel } from "@/components/editor/PreviewPanel";
 import { useAutosave, useShortcuts, useTheme } from "@/animation/hooks";
 import { useI18n } from "@/i18n";
+import { APP_VERSION } from "@/app-version";
 
 const Index = () => {
   const { t } = useI18n();
@@ -60,7 +61,7 @@ const Index = () => {
 
       <footer className="h-8 shrink-0 border-t border-border bg-card/60 backdrop-blur px-4 flex items-center justify-between text-[11px] text-muted-foreground">
         <span>{t("createdBy")} <span className="font-bold text-foreground">Andrei Pobiarzhyn</span></span>
-        <span className="hidden sm:inline">{t("version")}</span>
+        <span className="hidden sm:inline">ver. {APP_VERSION}</span>
       </footer>
     </div>
   );
