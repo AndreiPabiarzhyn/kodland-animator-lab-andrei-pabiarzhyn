@@ -13,3 +13,8 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => {},
   }),
 });
+
+Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
+  configurable: true,
+  value: () => "data:image/png;base64,AAAA",
+});

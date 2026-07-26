@@ -6,6 +6,44 @@ import { downloadBlob, loadImage } from "./utils";
 
 const GIF_WORKER_URL = "/gif.worker.js";
 
+const isDataUrl = (value: unknown): value is string =>
+  typeof value === "string" && /^data:image\/(png|jpeg|jpg|webp);base64,/.test(value);
+
+const isValidProject = (value: unknown): value is Project => {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Partial<Project>;
+  if (
+    typeof p.id !== "string" ||
+    typeof p.name !== "string" ||
+    !Number.isInteger(p.width) || p.width < 1 || p.width > 4096 ||
+    !Number.isInteger(p.height) || p.height < 1 || p.height > 4096 ||
+    typeof p.bgColor !== "string" ||
+    !Number.isInteger(p.fps) || p.fps < 1 || p.fps > 120 ||
+    typeof p.loop !== "boolean" ||
+    !Number.isFinite(p.createdAt) || !Number.isFinite(p.updatedAt) ||
+    !Array.isArray(p.frames) || p.frames.length === 0
+  ) return false;
+
+  return p.frames.every((frame) => {
+    if (!frame || typeof frame !== "object") return false;
+    const f = frame as Partial<Frame>;
+    if (
+      typeof f.id !== "string" ||
+      typeof f.activeLayerId !== "string" ||
+      !Number.isInteger(f.hold) || f.hold < 1 ||
+      !Array.isArray(f.layers) || f.layers.length === 0
+    ) return false;
+    if (!f.layers.some((layer) => layer && layer.id === f.activeLayerId)) return false;
+
+    return f.layers.every((layer) => {
+      if (!layer || typeof layer !== "object") return false;
+      const l = layer as Partial<Frame["layers"][number]>;
+      return typeof l.id === "string" && typeof l.name === "string" &&
+        typeof l.visible === "boolean" && isDataUrl(l.dataUrl);
+    });
+  });
+};
+
 /** Composite all visible layers of a frame into a fresh canvas (transparent). */
 const compositeFrame = async (frame: Frame, w: number, h: number): Promise<HTMLCanvasElement> => {
   const cv = document.createElement("canvas");
@@ -94,9 +132,9 @@ export const loadProjectFile = (file: File): Promise<Project> =>
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const p = JSON.parse(String(reader.result));
-        if (!p.frames || !Array.isArray(p.frames)) throw new Error("Invalid project file");
-        resolve(p as Project);
+        const p: unknown = JSON.parse(String(reader.result));
+        if (!isValidProject(p)) throw new Error("Invalid project file");
+        resolve(p);
       } catch (e) {
         reject(e);
       }

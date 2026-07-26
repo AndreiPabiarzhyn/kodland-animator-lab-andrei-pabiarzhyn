@@ -65,10 +65,11 @@ export const DrawingCanvas = ({ className }: Props) => {
   const cacheRef = useRef<{
     frameId: string | null;
     activeId: string | null;
+    activeDataUrl: string | null;
     below: HTMLCanvasElement | null;
     active: HTMLCanvasElement | null;
     above: HTMLCanvasElement | null;
-  }>({ frameId: null, activeId: null, below: null, active: null, above: null });
+  }>({ frameId: null, activeId: null, activeDataUrl: null, below: null, active: null, above: null });
 
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx0: number; ty0: number }>({
     active: false, startX: 0, startY: 0, tx0: 0, ty0: 0,
@@ -169,6 +170,15 @@ export const DrawingCanvas = ({ className }: Props) => {
       const bctx = below.getContext("2d")!;
       const actx = active.getContext("2d")!;
       const ovctx = above.getContext("2d")!;
+      const previous = cacheRef.current;
+      const activeLayerDataUrl = frame.layers.find((layer) => layer.id === frame.activeLayerId)?.dataUrl ?? null;
+      // Duplicated frames get new layer IDs but retain the same image data. Keep
+      // the previous bitmap as a fallback while the new data URL is decoding.
+      // This prevents a transient decode failure from replacing visible art
+      // with an empty canvas.
+      if (previous.active && previous.activeDataUrl === activeLayerDataUrl) {
+        actx.drawImage(previous.active, 0, 0);
+      }
       let foundActive = false;
       for (const layer of frame.layers) {
         if (layer.id === frame.activeLayerId) {
@@ -214,6 +224,7 @@ export const DrawingCanvas = ({ className }: Props) => {
       cacheRef.current = {
         frameId: frame.id,
         activeId: frame.activeLayerId,
+        activeDataUrl: activeLayerDataUrl,
         below, active, above,
       };
       paintBelow();
@@ -221,7 +232,6 @@ export const DrawingCanvas = ({ className }: Props) => {
       paintActiveToLive();
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame, project.width, project.height, paintBelow, paintAbove, paintActiveToLive]);
 
   // ----- Onion skin: previous frame only -----
@@ -631,7 +641,7 @@ export const DrawingCanvas = ({ className }: Props) => {
 
     // Pencil / Eraser / Mirror Pen
     drawingRef.current.active = true;
-    drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
+    drawingRef.current.last = { ...p, pressure: e.pressure || 0.5 };
     beginLiveStroke();
     const ctxs = getStrokeContexts();
     if (tool.tool === "mirror") drawMirroredSegment(ctxs, p, p, false);
@@ -710,10 +720,10 @@ export const DrawingCanvas = ({ className }: Props) => {
     const last = drawingRef.current.last!;
     if (tool.tool === "pencil" || tool.tool === "eraser") {
       drawStrokeSegment(ctxs, last, p, tool.tool === "eraser");
-      drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
+      drawingRef.current.last = { ...p, pressure: e.pressure || 0.5 };
     } else if (tool.tool === "mirror") {
       drawMirroredSegment(ctxs, last, p, false);
-      drawingRef.current.last = { ...p, pressure: (e as any).pressure || 0.5 };
+      drawingRef.current.last = { ...p, pressure: e.pressure || 0.5 };
     }
   };
 

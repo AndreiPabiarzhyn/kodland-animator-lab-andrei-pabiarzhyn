@@ -26,7 +26,12 @@ export const useShortcuts = () => {
 
       if (meta && k === "z" && !e.shiftKey) { e.preventDefault(); s.undo(); return; }
       if ((meta && k === "y") || (meta && e.shiftKey && k === "z")) { e.preventDefault(); s.redo(); return; }
-      if (k === " ") { e.preventDefault(); s.isPlaying ? s.pause() : s.play(); return; }
+      if (k === " ") {
+        e.preventDefault();
+        if (s.isPlaying) s.pause();
+        else s.play();
+        return;
+      }
       if (k === "arrowright") { e.preventDefault(); s.setCurrentFrame(s.currentFrame + 1); return; }
       if (k === "arrowleft") { e.preventDefault(); s.setCurrentFrame(s.currentFrame - 1); return; }
       if (k === "n" && !meta) { e.preventDefault(); s.addFrame(); return; }

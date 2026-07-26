@@ -13,7 +13,14 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mcpPlugin(), mode === "development" && componentTagger()].filter(Boolean),
+  // The Supabase MCP bundler emits a Windows absolute import path. Keep the
+  // checked-in portable function untouched on Windows; CI on Unix can still
+  // regenerate it from src/lib/mcp/index.ts.
+  plugins: [
+    react(),
+    process.platform !== "win32" && mcpPlugin(),
+    mode === "development" && componentTagger(),
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
