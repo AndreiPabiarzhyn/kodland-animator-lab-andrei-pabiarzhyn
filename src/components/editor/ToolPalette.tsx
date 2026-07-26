@@ -26,17 +26,17 @@ export const ToolPalette = () => {
   return (
     <TooltipProvider delayDuration={250}>
       <div className="grid grid-cols-2 gap-2">
-        {TOOLS.map((t) => {
-          const Icon = t.icon;
-          const active = tool.tool === t.id;
+        {TOOLS.map((toolItem) => {
+          const Icon = toolItem.icon;
+          const active = tool.tool === toolItem.id;
           return (
-            <Tooltip key={t.id}>
+            <Tooltip key={toolItem.id}>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   aria-pressed={active}
-                  aria-label={t(t.label)}
-                  onClick={() => setTool({ tool: t.id })}
+                  aria-label={t(toolItem.label)}
+                  onClick={() => setTool({ tool: toolItem.id })}
                   className={cn(
                     "h-12 w-12 rounded-xl flex items-center justify-center transition-all",
                     "hover:scale-105 active:scale-95",
@@ -49,8 +49,8 @@ export const ToolPalette = () => {
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                 <span className="font-semibold">{t(t.label)}</span>
-                <span className="ml-2 text-xs opacity-70">{t.key}</span>
+                 <span className="font-semibold">{t(toolItem.label)}</span>
+                <span className="ml-2 text-xs opacity-70">{toolItem.key}</span>
               </TooltipContent>
             </Tooltip>
           );
