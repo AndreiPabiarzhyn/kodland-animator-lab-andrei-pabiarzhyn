@@ -58,7 +58,7 @@ const Index = () => {
 
       <footer className="h-8 shrink-0 border-t border-border bg-card/60 backdrop-blur px-4 flex items-center justify-between text-[11px] text-muted-foreground">
         <span>Created by <span className="font-bold text-foreground">Andrei Pobiarzhyn</span></span>
-        <span className="hidden sm:inline">KodFlip — frame-by-frame animation studio</span>
+        <span className="hidden sm:inline">Версия приложения 0.21</span>
       </footer>
     </div>
   );
