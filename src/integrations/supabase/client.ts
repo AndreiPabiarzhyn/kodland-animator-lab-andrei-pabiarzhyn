@@ -7,7 +7,11 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 
 function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
+  return value.startsWith('sb_publishable_');
+}
+
+if (typeof SUPABASE_PUBLISHABLE_KEY === 'string' && SUPABASE_PUBLISHABLE_KEY.startsWith('sb_secret_')) {
+  throw new Error('A Supabase secret key must never be exposed to the browser. Use a publishable key.');
 }
 
 function createSupabaseFetch(supabaseKey: string): typeof fetch {

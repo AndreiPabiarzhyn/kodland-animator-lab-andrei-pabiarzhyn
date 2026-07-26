@@ -20,11 +20,12 @@ export type TranslationKey =
   | "zoomOut" | "centerFit" | "projectName" | "undo" | "redo" | "new" | "export" | "open" | "animatedGif"
   | "pngSequence" | "saveProject" | "openProject" | "importImage" | "help" | "toggleTheme" | "newAnimation"
   | "chooseCanvas" | "width" | "height" | "cancel" | "create" | "keyboardShortcuts" | "speedWorkflow"
-  | "createdBy" | "version" | "language" | "pencil" | "eraser" | "mirrorPen" | "rectangle" | "ellipse"
+  | "createdBy" | "version" | "projectVersion" | "savedAt" | "language" | "pencil" | "eraser" | "mirrorPen" | "rectangle" | "ellipse"
   | "line" | "selectTransform" | "colorPicker" | "movePan" | "pickCustomColor" | "brushSize" | "addLayer"
   | "duplicateLayer" | "deleteLayer" | "hideLayer" | "showLayer" | "renameLayer" | "gifExported" | "gifExportFailed"
   | "pngSaved" | "exportFailed" | "projectLoaded" | "projectLoadFailed" | "imageImported" | "imageImportFailed"
-  | "newProjectCreated";
+  | "newProjectCreated" | "renderingGif" | "zippingPngs" | "helpDrawing" | "helpDrawingText" | "helpFrames" | "helpFramesText"
+  | "helpNavigation" | "helpNavigationText" | "helpEditing" | "helpEditingText" | "prevNext" | "panCanvas" | "applyCancel" | "toolSize";
 
 type Dictionary = Record<TranslationKey, string>;
 
@@ -37,12 +38,15 @@ const en: Dictionary = {
   pngSequence: "PNG sequence (.zip)", saveProject: "Save project (.json)", openProject: "Open project (.json)", importImage: "Import image as frame",
   help: "Help", toggleTheme: "Toggle theme", newAnimation: "New animation", chooseCanvas: "Choose your canvas size. You can change it any time.",
   width: "Width", height: "Height", cancel: "Cancel", create: "Create", keyboardShortcuts: "Keyboard shortcuts", speedWorkflow: "Speed up your workflow!",
-  createdBy: "Created by", version: "Application version 0.21", language: "Language", pencil: "Pencil", eraser: "Eraser", mirrorPen: "Mirror Pen",
+  createdBy: "Created by", version: "Application version 0.21", projectVersion: "Project", savedAt: "Saved", language: "Language", pencil: "Pencil", eraser: "Eraser", mirrorPen: "Mirror Pen",
   rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", selectTransform: "Select / Transform", colorPicker: "Color Picker", movePan: "Move / Pan",
   pickCustomColor: "Pick custom color", brushSize: "Brush size", addLayer: "Add layer", duplicateLayer: "Duplicate layer", deleteLayer: "Delete layer",
   hideLayer: "Hide layer", showLayer: "Show layer", renameLayer: "Double-click to rename", gifExported: "GIF exported!", gifExportFailed: "GIF export failed",
   pngSaved: "PNG sequence saved!", exportFailed: "Export failed", projectLoaded: "Project loaded", projectLoadFailed: "Could not load project",
-  imageImported: "Image imported as frame", imageImportFailed: "Could not import image", newProjectCreated: "New project!",
+  imageImported: "Image imported as frame", imageImportFailed: "Could not import image", newProjectCreated: "New project!", renderingGif: "Rendering GIF…", zippingPngs: "Zipping PNGs…",
+  helpDrawing: "Drawing", helpDrawingText: "Choose a tool, color, size, and opacity, then draw directly on the canvas.", helpFrames: "Frames", helpFramesText: "Add a blank frame or duplicate the current frame to keep its layers and continue the animation.",
+  helpNavigation: "Navigation", helpNavigationText: "Use the timeline to select frames. Scroll to zoom and hold Shift while dragging to pan the canvas.", helpEditing: "Editing", helpEditingText: "Use undo and redo for pixel edits. Select / Transform lets you move or resize a selection.",
+  prevNext: "Previous / next frame", panCanvas: "Pan canvas", applyCancel: "Apply / cancel selection", toolSize: "Tool size",
 };
 
 const translations: Record<Language, Partial<Dictionary>> = {
@@ -56,6 +60,17 @@ const translations: Record<Language, Partial<Dictionary>> = {
   id: { tools: "Alat", preview: "Pratinjau", layers: "Lapisan", color: "Warna", size: "Ukuran", opacity: "Opasitas", onionSkin: "Onion skin", play: "Putar", pause: "Jeda", frame: "Frame", duplicate: "Duplikat", delete: "Hapus", loop: "Ulangi", addFrame: "Tambah frame", undo: "Urungkan", redo: "Ulangi lagi", new: "Baru", export: "Ekspor", open: "Buka", help: "Bantuan", language: "Bahasa", version: "Versi aplikasi 0.21", createdBy: "Dibuat oleh", newAnimation: "Animasi baru", chooseCanvas: "Pilih ukuran kanvas. Kamu dapat mengubahnya nanti.", width: "Lebar", height: "Tinggi", cancel: "Batal", create: "Buat", keyboardShortcuts: "Pintasan keyboard", pencil: "Pensil", eraser: "Penghapus", mirrorPen: "Kuas cermin", rectangle: "Persegi panjang", ellipse: "Elips", line: "Garis", selectTransform: "Pilih / transformasi", colorPicker: "Pemilih warna", movePan: "Pindah / geser", style: "Gaya", outline: "Garis luar", fill: "Isi", addLayer: "Tambah lapisan", duplicateLayer: "Duplikat lapisan", deleteLayer: "Hapus lapisan" },
 };
 
+const extraTranslations: Record<Language, Partial<Dictionary>> = {
+  en: {},
+  ru: { projectVersion: "Проект", savedAt: "Сохранено", renderingGif: "Создание GIF…", zippingPngs: "Упаковка PNG…", helpDrawing: "Рисование", helpDrawingText: "Выберите инструмент, цвет, размер и прозрачность, затем рисуйте на холсте.", helpFrames: "Кадры", helpFramesText: "Добавляйте пустой кадр или дублируйте текущий вместе со слоями.", helpNavigation: "Навигация", helpNavigationText: "Выбирайте кадры на таймлайне. Прокручивайте для масштаба и удерживайте Shift при перетаскивании для панорамирования.", helpEditing: "Редактирование", helpEditingText: "Используйте отмену и повтор для изменений. Выбор / трансформация позволяет двигать и менять размер выделения.", prevNext: "Предыдущий / следующий кадр", panCanvas: "Панорамирование холста", applyCancel: "Применить / отменить выделение", toolSize: "Размер инструмента" },
+  pl: { projectVersion: "Projekt", savedAt: "Zapisano", renderingGif: "Renderowanie GIF…", zippingPngs: "Pakowanie PNG…", helpDrawing: "Rysowanie", helpDrawingText: "Wybierz narzędzie, kolor, rozmiar i krycie, a następnie rysuj na płótnie.", helpFrames: "Klatki", helpFramesText: "Dodaj pustą klatkę lub zduplikuj bieżącą wraz z warstwami.", helpNavigation: "Nawigacja", helpNavigationText: "Wybieraj klatki na osi czasu. Przewijaj, aby powiększać, i przytrzymaj Shift podczas przeciągania, aby przesuwać płótno.", helpEditing: "Edycja", helpEditingText: "Używaj cofania i ponawiania zmian. Zaznaczanie / przekształcanie pozwala przesuwać zaznaczenie.", prevNext: "Poprzednia / następna klatka", panCanvas: "Przesuwanie płótna", applyCancel: "Zastosuj / anuluj zaznaczenie", toolSize: "Rozmiar narzędzia" },
+  es: { projectVersion: "Proyecto", savedAt: "Guardado", renderingGif: "Renderizando GIF…", zippingPngs: "Comprimiendo PNG…", helpDrawing: "Dibujo", helpDrawingText: "Elige una herramienta, color, tamaño y opacidad, y dibuja directamente en el lienzo.", helpFrames: "Fotogramas", helpFramesText: "Añade un fotograma vacío o duplica el actual con sus capas.", helpNavigation: "Navegación", helpNavigationText: "Selecciona fotogramas en la línea de tiempo. Desplázate para ampliar y mantén Shift al arrastrar para mover el lienzo.", helpEditing: "Edición", helpEditingText: "Usa deshacer y rehacer para los cambios. Seleccionar / transformar permite mover una selección.", prevNext: "Fotograma anterior / siguiente", panCanvas: "Mover el lienzo", applyCancel: "Aplicar / cancelar selección", toolSize: "Tamaño de herramienta" },
+  pt: { projectVersion: "Projeto", savedAt: "Salvo", renderingGif: "Renderizando GIF…", zippingPngs: "Compactando PNG…", helpDrawing: "Desenho", helpDrawingText: "Escolha uma ferramenta, cor, tamanho e opacidade e desenhe diretamente na tela.", helpFrames: "Quadros", helpFramesText: "Adicione um quadro vazio ou duplique o atual com suas camadas.", helpNavigation: "Navegação", helpNavigationText: "Selecione quadros na linha do tempo. Role para ampliar e segure Shift ao arrastar para mover a tela.", helpEditing: "Edição", helpEditingText: "Use desfazer e refazer para as alterações. Selecionar / transformar permite mover uma seleção.", prevNext: "Quadro anterior / próximo", panCanvas: "Mover a tela", applyCancel: "Aplicar / cancelar seleção", toolSize: "Tamanho da ferramenta" },
+  it: { projectVersion: "Progetto", savedAt: "Salvato", renderingGif: "Rendering GIF…", zippingPngs: "Compressione PNG…", helpDrawing: "Disegno", helpDrawingText: "Scegli uno strumento, un colore, una dimensione e l'opacità, poi disegna sulla tela.", helpFrames: "Fotogrammi", helpFramesText: "Aggiungi un fotogramma vuoto o duplica quello corrente con i suoi livelli.", helpNavigation: "Navigazione", helpNavigationText: "Seleziona i fotogrammi nella timeline. Scorri per ingrandire e tieni premuto Shift mentre trascini per spostare la tela.", helpEditing: "Modifica", helpEditingText: "Usa annulla e ripristina per le modifiche. Seleziona / trasforma permette di spostare una selezione.", prevNext: "Fotogramma precedente / successivo", panCanvas: "Sposta la tela", applyCancel: "Applica / annulla selezione", toolSize: "Dimensione strumento" },
+  tr: { projectVersion: "Proje", savedAt: "Kaydedildi", renderingGif: "GIF oluşturuluyor…", zippingPngs: "PNG'ler paketleniyor…", helpDrawing: "Çizim", helpDrawingText: "Bir araç, renk, boyut ve opaklık seçin; ardından tuval üzerinde çizin.", helpFrames: "Kareler", helpFramesText: "Boş bir kare ekleyin veya katmanlarıyla birlikte mevcut kareyi çoğaltın.", helpNavigation: "Gezinme", helpNavigationText: "Zaman çizelgesinden kare seçin. Yakınlaştırmak için kaydırın; tuvali taşımak için sürüklerken Shift'e basılı tutun.", helpEditing: "Düzenleme", helpEditingText: "Değişiklikler için geri al ve yinele seçeneklerini kullanın. Seç / dönüştür, seçimi taşımanızı sağlar.", prevNext: "Önceki / sonraki kare", panCanvas: "Tuvali taşı", applyCancel: "Seçimi uygula / iptal et", toolSize: "Araç boyutu" },
+  id: { projectVersion: "Proyek", savedAt: "Disimpan", renderingGif: "Merender GIF…", zippingPngs: "Mengemas PNG…", helpDrawing: "Menggambar", helpDrawingText: "Pilih alat, warna, ukuran, dan opasitas, lalu gambar langsung di kanvas.", helpFrames: "Frame", helpFramesText: "Tambahkan frame kosong atau duplikasikan frame saat ini beserta lapisannya.", helpNavigation: "Navigasi", helpNavigationText: "Pilih frame di timeline. Gulir untuk memperbesar dan tahan Shift saat menyeret untuk menggeser kanvas.", helpEditing: "Pengeditan", helpEditingText: "Gunakan urungkan dan ulangi untuk perubahan. Pilih / transformasi memungkinkan Anda memindahkan pilihan.", prevNext: "Frame sebelumnya / berikutnya", panCanvas: "Geser kanvas", applyCancel: "Terapkan / batalkan pilihan", toolSize: "Ukuran alat" },
+};
+
 const LANGUAGE_KEY = "kodflip:language";
 const I18nContext = createContext<{ language: Language; setLanguage: (language: Language) => void; t: (key: TranslationKey) => string } | null>(null);
 
@@ -65,7 +80,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
     return stored && LANGUAGES.some((item) => item.id === stored) ? stored : "en";
   });
   const setLanguage = (next: Language) => { setLanguageState(next); localStorage.setItem(LANGUAGE_KEY, next); };
-  const value = useMemo(() => ({ language, setLanguage, t: (key: TranslationKey) => translations[language][key] ?? en[key] }), [language]);
+  const value = useMemo(() => ({ language, setLanguage, t: (key: TranslationKey) => translations[language][key] ?? extraTranslations[language][key] ?? en[key] }), [language]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };
 

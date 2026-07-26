@@ -9,9 +9,12 @@ import { PreviewPanel } from "@/components/editor/PreviewPanel";
 import { useAutosave, useShortcuts, useTheme } from "@/animation/hooks";
 import { useI18n } from "@/i18n";
 import { APP_VERSION } from "@/app-version";
+import { useStore } from "@/animation/store";
 
 const Index = () => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const project = useStore((s) => s.project);
+  const savedAt = new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short" }).format(project.updatedAt);
   useTheme();
   useAutosave();
   useShortcuts();
@@ -61,7 +64,9 @@ const Index = () => {
 
       <footer className="h-8 shrink-0 border-t border-border bg-card/60 backdrop-blur px-4 flex items-center justify-between text-[11px] text-muted-foreground">
         <span>{t("createdBy")} <span className="font-bold text-foreground">Andrei Pobiarzhyn</span></span>
-        <span className="hidden sm:inline">ver. {APP_VERSION}</span>
+        <span className="text-[10px] tabular-nums whitespace-nowrap">
+          ver. {APP_VERSION} · {t("projectVersion")} {project.revision ?? 1} · {t("savedAt")} {savedAt}
+        </span>
       </footer>
     </div>
   );

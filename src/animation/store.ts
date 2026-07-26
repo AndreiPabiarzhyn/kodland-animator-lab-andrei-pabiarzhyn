@@ -20,6 +20,7 @@ const defaultProject = (): Project => {
   const w = 800, h = 600;
   return {
     id: uid(),
+    revision: 1,
     name: "My Animation",
     width: w,
     height: h,
@@ -95,6 +96,8 @@ const pushHistory = (
   return next;
 };
 
+const nextRevision = (project: Project) => (project.revision ?? 0) + 1;
+
 export const useStore = create<AppState>((set, get) => ({
   project: defaultProject(),
   currentFrame: 0,
@@ -107,7 +110,7 @@ export const useStore = create<AppState>((set, get) => ({
   setTool: (patch) => set((s) => ({ tool: { ...s.tool, ...patch } })),
   setOnion: (patch) => set((s) => ({ onion: { ...s.onion, ...patch } })),
   setProjectMeta: (patch) =>
-    set((s) => ({ project: { ...s.project, ...patch, updatedAt: Date.now() } })),
+    set((s) => ({ project: { ...s.project, ...patch, revision: nextRevision(s.project), updatedAt: Date.now() } })),
 
   setCurrentFrame: (i) =>
     set((s) => ({ currentFrame: Math.max(0, Math.min(s.project.frames.length - 1, i)) })),
@@ -118,7 +121,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = [...s.project.frames];
       frames.splice(s.currentFrame + 1, 0, blank);
       return {
-        project: { ...s.project, frames, updatedAt: Date.now() },
+         project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() },
         currentFrame: s.currentFrame + 1,
       };
     }),
@@ -139,7 +142,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = [...s.project.frames];
       frames.splice(idx + 1, 0, dup);
       return {
-        project: { ...s.project, frames, updatedAt: Date.now() },
+        project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() },
         currentFrame: idx + 1,
       };
     }),
@@ -150,7 +153,7 @@ export const useStore = create<AppState>((set, get) => ({
       const idx = i ?? s.currentFrame;
       const frames = s.project.frames.filter((_, k) => k !== idx);
       return {
-        project: { ...s.project, frames, updatedAt: Date.now() },
+        project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() },
         currentFrame: Math.max(0, Math.min(idx, frames.length - 1)),
       };
     }),
@@ -165,13 +168,14 @@ export const useStore = create<AppState>((set, get) => ({
       if (cur === from) cur = to;
       else if (from < cur && to >= cur) cur--;
       else if (from > cur && to <= cur) cur++;
-      return { project: { ...s.project, frames, updatedAt: Date.now() }, currentFrame: cur };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() }, currentFrame: cur };
     }),
 
   setFrameHold: (i, hold) =>
     set((s) => ({
       project: {
         ...s.project,
+        revision: nextRevision(s.project),
         frames: s.project.frames.map((f, k) => (k === i ? { ...f, hold: Math.max(1, hold) } : f)),
         updatedAt: Date.now(),
       },
@@ -188,7 +192,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = s.project.frames.map((fr, k) =>
         k === s.currentFrame ? { ...fr, layers, activeLayerId: newLayer.id } : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   duplicateLayer: (layerId) =>
@@ -205,7 +209,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = s.project.frames.map((fr, k) =>
         k === s.currentFrame ? { ...fr, layers, activeLayerId: dup.id } : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   deleteLayer: (layerId) =>
@@ -220,7 +224,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = s.project.frames.map((fr, k) =>
         k === s.currentFrame ? { ...fr, layers, activeLayerId: newActive } : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   moveLayer: (from, to) =>
@@ -234,7 +238,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = s.project.frames.map((fr, k) =>
         k === s.currentFrame ? { ...fr, layers } : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   renameLayer: (layerId, name) =>
@@ -244,7 +248,7 @@ export const useStore = create<AppState>((set, get) => ({
           ? { ...fr, layers: fr.layers.map((l) => (l.id === layerId ? { ...l, name } : l)) }
           : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   toggleLayerVisible: (layerId) =>
@@ -254,7 +258,7 @@ export const useStore = create<AppState>((set, get) => ({
           ? { ...fr, layers: fr.layers.map((l) => (l.id === layerId ? { ...l, visible: !l.visible } : l)) }
           : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   setActiveLayer: (layerId) =>
@@ -262,7 +266,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = s.project.frames.map((fr, k) =>
         k === s.currentFrame ? { ...fr, activeLayerId: layerId } : fr,
       );
-      return { project: { ...s.project, frames } };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() } };
     }),
 
   updateActiveLayerData: (dataUrl, snapshotPrev) =>
@@ -277,7 +281,7 @@ export const useStore = create<AppState>((set, get) => ({
       const frames = s.project.frames.map((fr, k) =>
         k === s.currentFrame ? { ...fr, layers } : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() }, history, future };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() }, history, future };
     }),
 
   updateLayerData: (frameIdx, layerId, dataUrl, snapshotPrev) =>
@@ -290,7 +294,7 @@ export const useStore = create<AppState>((set, get) => ({
           ? { ...fr, layers: fr.layers.map((l) => (l.id === layerId ? { ...l, dataUrl } : l)) }
           : fr,
       );
-      return { project: { ...s.project, frames, updatedAt: Date.now() }, history, future };
+      return { project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() }, history, future };
     }),
 
   undo: () =>
@@ -310,7 +314,7 @@ export const useStore = create<AppState>((set, get) => ({
           : fr,
       );
       return {
-        project: { ...s.project, frames, updatedAt: Date.now() },
+         project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() },
         history: { ...s.history, [id]: newStack },
         future: { ...s.future, [id]: fut },
       };
@@ -333,7 +337,7 @@ export const useStore = create<AppState>((set, get) => ({
           : fr,
       );
       return {
-        project: { ...s.project, frames, updatedAt: Date.now() },
+         project: { ...s.project, frames, revision: nextRevision(s.project), updatedAt: Date.now() },
         future: { ...s.future, [id]: newStack },
         history: { ...s.history, [id]: hist },
       };
@@ -359,19 +363,20 @@ export const useStore = create<AppState>((set, get) => ({
       p.width = w;
       p.height = h;
       p.frames = [makeFrame(w, h)];
+      p.revision = 1;
       return { project: p, currentFrame: 0, history: {}, future: {}, isPlaying: false };
     }),
 
   loadProject: (p) =>
-    set({ project: p, currentFrame: 0, history: {}, future: {}, isPlaying: false }),
+    set({ project: { ...p, revision: p.revision ?? 1 }, currentFrame: 0, history: {}, future: {}, isPlaying: false }),
 
   loadFromLocalStorage: () => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const p = JSON.parse(raw) as Project;
-      if (p && p.frames && p.frames.length && p.frames[0].layers) {
-        set({ project: p, currentFrame: 0, history: {}, future: {} });
+       const p = JSON.parse(raw) as Project;
+       if (p && p.frames && p.frames.length && p.frames[0].layers) {
+         set({ project: { ...p, revision: p.revision ?? 1 }, currentFrame: 0, history: {}, future: {} });
       }
     } catch {
       /* ignore */

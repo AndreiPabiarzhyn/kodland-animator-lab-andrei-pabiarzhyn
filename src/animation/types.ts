@@ -41,6 +41,8 @@ export interface OnionSettings {
 
 export interface Project {
   id: string;
+  /** Incremented for every persisted project change. */
+  revision: number;
   name: string;
   width: number;
   height: number;

@@ -5,40 +5,47 @@ import { Frame, Project } from "./types";
 import { downloadBlob, loadImage } from "./utils";
 
 const GIF_WORKER_URL = "/gif.worker.js";
+const MAX_PROJECT_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_IMAGE_FILE_BYTES = 12 * 1024 * 1024;
+const MAX_DATA_URL_LENGTH = 20 * 1024 * 1024;
+const MAX_FRAMES = 300;
+const MAX_LAYERS_PER_FRAME = 32;
 
 const isDataUrl = (value: unknown): value is string =>
-  typeof value === "string" && /^data:image\/(png|jpeg|jpg|webp);base64,/.test(value);
+  typeof value === "string" && value.length <= MAX_DATA_URL_LENGTH &&
+  /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(value);
 
 const isValidProject = (value: unknown): value is Project => {
   if (!value || typeof value !== "object") return false;
   const p = value as Partial<Project>;
   if (
-    typeof p.id !== "string" ||
-    typeof p.name !== "string" ||
+    typeof p.id !== "string" || p.id.length === 0 || p.id.length > 128 ||
+    typeof p.name !== "string" || p.name.length > 120 ||
     !Number.isInteger(p.width) || p.width < 1 || p.width > 4096 ||
     !Number.isInteger(p.height) || p.height < 1 || p.height > 4096 ||
     typeof p.bgColor !== "string" ||
     !Number.isInteger(p.fps) || p.fps < 1 || p.fps > 120 ||
     typeof p.loop !== "boolean" ||
     !Number.isFinite(p.createdAt) || !Number.isFinite(p.updatedAt) ||
-    !Array.isArray(p.frames) || p.frames.length === 0
+    !Array.isArray(p.frames) || p.frames.length === 0 || p.frames.length > MAX_FRAMES
   ) return false;
 
   return p.frames.every((frame) => {
     if (!frame || typeof frame !== "object") return false;
     const f = frame as Partial<Frame>;
     if (
-      typeof f.id !== "string" ||
-      typeof f.activeLayerId !== "string" ||
-      !Number.isInteger(f.hold) || f.hold < 1 ||
-      !Array.isArray(f.layers) || f.layers.length === 0
+      typeof f.id !== "string" || f.id.length === 0 || f.id.length > 128 ||
+      typeof f.activeLayerId !== "string" || f.activeLayerId.length === 0 || f.activeLayerId.length > 128 ||
+      !Number.isInteger(f.hold) || f.hold < 1 || f.hold > 120 ||
+      !Array.isArray(f.layers) || f.layers.length === 0 || f.layers.length > MAX_LAYERS_PER_FRAME
     ) return false;
     if (!f.layers.some((layer) => layer && layer.id === f.activeLayerId)) return false;
 
     return f.layers.every((layer) => {
       if (!layer || typeof layer !== "object") return false;
       const l = layer as Partial<Frame["layers"][number]>;
-      return typeof l.id === "string" && typeof l.name === "string" &&
+      return typeof l.id === "string" && l.id.length > 0 && l.id.length <= 128 &&
+        typeof l.name === "string" && l.name.length <= 120 &&
         typeof l.visible === "boolean" && isDataUrl(l.dataUrl);
     });
   });
@@ -129,6 +136,10 @@ export const saveProjectFile = (project: Project) => {
 
 export const loadProjectFile = (file: File): Promise<Project> =>
   new Promise((resolve, reject) => {
+    if (file.size > MAX_PROJECT_FILE_BYTES) {
+      reject(new Error("Project file is too large"));
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -145,6 +156,10 @@ export const loadProjectFile = (file: File): Promise<Project> =>
 
 export const importImageAsFrame = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
+    if (file.size > MAX_IMAGE_FILE_BYTES || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+      reject(new Error("Unsupported or oversized image"));
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = reject;

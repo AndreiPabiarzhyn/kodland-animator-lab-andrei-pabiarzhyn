@@ -52,9 +52,9 @@ export const TopBar = () => {
   const [showHelp, setShowHelp] = useState(false);
 
   const handleExportGif = async () => {
-      setExporting("Rendering GIF…");
+      setExporting(t("renderingGif"));
     try {
-      await exportGif(project, (p) => setExporting(`Rendering GIF… ${Math.round(p * 100)}%`));
+      await exportGif(project, (p) => setExporting(`${t("renderingGif")} ${Math.round(p * 100)}%`));
       toast.success(t("gifExported"));
     } catch (e) {
       console.error(e);
@@ -65,7 +65,7 @@ export const TopBar = () => {
   };
 
   const handleExportPng = async () => {
-    setExporting("Zipping PNGs…");
+    setExporting(t("zippingPngs"));
     try {
       await exportPngSequence(project);
       toast.success(t("pngSaved"));
@@ -256,14 +256,27 @@ export const TopBar = () => {
              <DialogTitle>{t("keyboardShortcuts")}</DialogTitle>
              <DialogDescription>{t("speedWorkflow")}</DialogDescription>
           </DialogHeader>
+          <div className="space-y-3 text-sm">
+            {[
+              [t("helpDrawing"), t("helpDrawingText")],
+              [t("helpFrames"), t("helpFramesText")],
+              [t("helpNavigation"), t("helpNavigationText")],
+              [t("helpEditing"), t("helpEditingText")],
+            ].map(([title, text]) => (
+              <div key={title}>
+                <h4 className="font-bold text-foreground">{title}</h4>
+                <p className="text-xs leading-relaxed text-muted-foreground">{text}</p>
+              </div>
+            ))}
+          </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             {[
-              ["P", "Pencil"], ["E", "Eraser"], ["G", "Fill"],
-              ["S", "Select / Transform"], ["I", "Color picker"],
-              ["[ / ]", "Tool size"], ["N", "New frame"], ["D", "Duplicate frame"],
-              ["Space", "Play / Pause"], ["← / →", "Prev/Next frame"],
-              ["Ctrl+Z", "Undo"], ["Ctrl+Shift+Z", "Redo"], ["Scroll", "Zoom"],
-              ["Shift+Drag", "Pan canvas"], ["Enter / Esc", "Apply / Cancel selection"],
+              ["P", t("pencil")], ["E", t("eraser")], ["G", t("fill")],
+              ["S", t("selectTransform")], ["I", t("colorPicker")],
+              ["[ / ]", t("toolSize")], ["N", t("addFrame")], ["D", t("duplicate")],
+              ["Space", `${t("play")} / ${t("pause")}`], ["← / →", t("prevNext")],
+              ["Ctrl+Z", t("undo")], ["Ctrl+Shift+Z", t("redo")], ["Scroll", `${t("zoomIn")} / ${t("zoomOut")}`],
+              ["Shift+Drag", t("panCanvas")], ["Enter / Esc", t("applyCancel")],
             ].map(([k, v]) => (
               <div key={k} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5">
                 <span className="text-muted-foreground">{v}</span>
