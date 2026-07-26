@@ -3,23 +3,25 @@ import { ToolId } from "@/animation/types";
 import { useStore } from "@/animation/store";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useI18n, type TranslationKey } from "@/i18n";
 
-const TOOLS: Array<{ id: ToolId; label: string; key: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: "pencil", label: "Pencil", key: "P", icon: Pencil },
-  { id: "eraser", label: "Eraser", key: "E", icon: Eraser },
-  { id: "fill", label: "Fill", key: "G", icon: PaintBucket },
-  { id: "mirror", label: "Mirror Pen", key: "M", icon: FlipHorizontal },
-  { id: "rectangle", label: "Rectangle", key: "R", icon: Square },
-  { id: "circle", label: "Ellipse", key: "C", icon: Circle },
-  { id: "line", label: "Line", key: "L", icon: Minus },
-  { id: "select", label: "Select / Transform", key: "S", icon: BoxSelect },
-  { id: "eyedropper", label: "Color Picker", key: "I", icon: Pipette },
-  { id: "pan", label: "Move / Pan", key: "H", icon: Hand },
+const TOOLS: Array<{ id: ToolId; label: TranslationKey; key: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "pencil", label: "pencil", key: "P", icon: Pencil },
+  { id: "eraser", label: "eraser", key: "E", icon: Eraser },
+  { id: "fill", label: "fill", key: "G", icon: PaintBucket },
+  { id: "mirror", label: "mirrorPen", key: "M", icon: FlipHorizontal },
+  { id: "rectangle", label: "rectangle", key: "R", icon: Square },
+  { id: "circle", label: "ellipse", key: "C", icon: Circle },
+  { id: "line", label: "line", key: "L", icon: Minus },
+  { id: "select", label: "selectTransform", key: "S", icon: BoxSelect },
+  { id: "eyedropper", label: "colorPicker", key: "I", icon: Pipette },
+  { id: "pan", label: "movePan", key: "H", icon: Hand },
 ];
 
 export const ToolPalette = () => {
   const tool = useStore((s) => s.tool);
   const setTool = useStore((s) => s.setTool);
+  const { t } = useI18n();
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -33,7 +35,7 @@ export const ToolPalette = () => {
                 <button
                   type="button"
                   aria-pressed={active}
-                  aria-label={t.label}
+                  aria-label={t(t.label)}
                   onClick={() => setTool({ tool: t.id })}
                   className={cn(
                     "h-12 w-12 rounded-xl flex items-center justify-center transition-all",
@@ -47,7 +49,7 @@ export const ToolPalette = () => {
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                <span className="font-semibold">{t.label}</span>
+                 <span className="font-semibold">{t(t.label)}</span>
                 <span className="ml-2 text-xs opacity-70">{t.key}</span>
               </TooltipContent>
             </Tooltip>

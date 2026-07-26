@@ -3,23 +3,25 @@ import { DEFAULT_PALETTE, BRUSH_PRESETS } from "@/animation/types";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 export const ToolOptions = () => {
   const tool = useStore((s) => s.tool);
   const setTool = useStore((s) => s.setTool);
+  const { t } = useI18n();
 
   return (
     <div className="space-y-4">
       {/* Color */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Color</Label>
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("color")}</Label>
           <input
             type="color"
             value={tool.color}
             onChange={(e) => setTool({ color: e.target.value })}
             className="h-7 w-10 rounded-md border border-border bg-transparent cursor-pointer"
-            aria-label="Pick custom color"
+            aria-label={t("pickCustomColor")}
           />
         </div>
         <div className="grid grid-cols-6 gap-1.5">
@@ -43,7 +45,7 @@ export const ToolOptions = () => {
       {/* Size */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Size</Label>
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("size")}</Label>
           <span className="text-sm font-semibold tabular-nums">{tool.size}px</span>
         </div>
         <div className="flex items-end justify-between gap-1 mb-3 px-1">
@@ -55,7 +57,7 @@ export const ToolOptions = () => {
                 key={s}
                 type="button"
                 onClick={() => setTool({ size: s })}
-                aria-label={`Brush size ${s}px`}
+                aria-label={`${t("brushSize")} ${s}px`}
                 className={cn(
                   "h-9 w-9 rounded-lg flex items-center justify-center transition-all",
                   active
@@ -86,7 +88,7 @@ export const ToolOptions = () => {
       {/* Opacity */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Opacity</Label>
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("opacity")}</Label>
           <span className="text-sm font-semibold tabular-nums">{Math.round(tool.opacity * 100)}%</span>
         </div>
         <Slider
@@ -102,7 +104,7 @@ export const ToolOptions = () => {
       {tool.tool === "mirror" && (
         <div>
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
-            Mirror Axis
+            {t("mirrorAxis")}
           </Label>
           <div className="grid grid-cols-3 gap-1.5">
             {(["horizontal", "vertical", "both"] as const).map((a) => (
@@ -117,7 +119,7 @@ export const ToolOptions = () => {
                     : "bg-secondary hover:bg-muted",
                 )}
               >
-                {a}
+                {t(a)}
               </button>
             ))}
           </div>
@@ -128,7 +130,7 @@ export const ToolOptions = () => {
       {(tool.tool === "rectangle" || tool.tool === "circle") && (
         <div>
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
-            Style
+            {t("style")}
           </Label>
           <div className="grid grid-cols-2 gap-1.5">
             <button
@@ -141,7 +143,7 @@ export const ToolOptions = () => {
                   : "bg-secondary hover:bg-muted",
               )}
             >
-              Outline
+              {t("outline")}
             </button>
             <button
               type="button"
@@ -153,7 +155,7 @@ export const ToolOptions = () => {
                   : "bg-secondary hover:bg-muted",
               )}
             >
-              Fill
+              {t("fill")}
             </button>
           </div>
         </div>

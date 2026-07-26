@@ -6,6 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { Frame } from "@/animation/types";
 import { loadImage } from "@/animation/utils";
+import { useI18n } from "@/i18n";
 
 const FrameThumb = ({ frame, w, h }: { frame: Frame; w: number; h: number }) => {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -48,6 +49,7 @@ export const Timeline = () => {
   const isPlaying = useStore((s) => s.isPlaying);
   const play = useStore((s) => s.play);
   const pause = useStore((s) => s.pause);
+  const { t } = useI18n();
 
   const rafRef = useRef<number>();
   const lastTickRef = useRef<number>(0);
@@ -94,14 +96,14 @@ export const Timeline = () => {
           )}
         >
           {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          {isPlaying ? "Pause" : "Play"}
+          {isPlaying ? t("pause") : t("play")}
         </Button>
 
         <Button size="sm" variant="secondary" className="rounded-xl gap-1.5" onClick={() => addFrame()}>
-          <Plus className="h-4 w-4" /> Frame
+          <Plus className="h-4 w-4" /> {t("frame")}
         </Button>
         <Button size="sm" variant="secondary" className="rounded-xl gap-1.5" onClick={() => duplicateFrame()}>
-          <Copy className="h-4 w-4" /> Duplicate
+          <Copy className="h-4 w-4" /> {t("duplicate")}
         </Button>
         <Button
           size="sm"
@@ -110,7 +112,7 @@ export const Timeline = () => {
           onClick={() => deleteFrame()}
           disabled={project.frames.length <= 1}
         >
-          <Trash2 className="h-4 w-4" /> Delete
+          <Trash2 className="h-4 w-4" /> {t("delete")}
         </Button>
 
         <div className="ml-auto flex items-center gap-3">
@@ -123,10 +125,10 @@ export const Timeline = () => {
             aria-pressed={project.loop}
           >
             <RotateCw className="h-3.5 w-3.5" />
-            Loop
+            {t("loop")}
           </button>
           <div className="flex items-center gap-2 min-w-[180px]">
-            <span className="text-xs font-bold uppercase text-muted-foreground">FPS</span>
+            <span className="text-xs font-bold uppercase text-muted-foreground">{t("fps")}</span>
             <Slider
               value={[project.fps]}
               min={1}
@@ -138,7 +140,7 @@ export const Timeline = () => {
             <span className="text-sm font-bold tabular-nums w-6 text-right">{project.fps}</span>
           </div>
           <div className="text-xs text-muted-foreground tabular-nums">
-            Frame <span className="font-bold text-foreground">{currentFrame + 1}</span> / {project.frames.length}
+            {t("frame")} <span className="font-bold text-foreground">{currentFrame + 1}</span> / {project.frames.length}
           </div>
         </div>
       </div>
@@ -180,7 +182,7 @@ export const Timeline = () => {
           onClick={() => addFrame()}
           className="shrink-0 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-center text-muted-foreground hover:text-primary"
           style={{ width: thumbW, height: thumbH + 4 }}
-          aria-label="Add frame"
+          aria-label={t("addFrame")}
         >
           <Plus className="h-6 w-6" />
         </button>

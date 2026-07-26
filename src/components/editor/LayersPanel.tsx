@@ -4,6 +4,7 @@ import { Eye, EyeOff, Plus, Copy, Trash2, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/i18n";
 
 export const LayersPanel = () => {
   const project = useStore((s) => s.project);
@@ -15,6 +16,7 @@ export const LayersPanel = () => {
   const renameLayer = useStore((s) => s.renameLayer);
   const toggleVisible = useStore((s) => s.toggleLayerVisible);
   const setActive = useStore((s) => s.setActiveLayer);
+  const { t } = useI18n();
 
   const frame = project.frames[currentFrame];
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,12 +32,12 @@ export const LayersPanel = () => {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Layers</h3>
+        <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">{t("layers")}</h3>
         <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => addLayer()} title="Add layer">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => addLayer()} title={t("addLayer")}>
             <Plus className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => duplicateLayer()} title="Duplicate layer">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => duplicateLayer()} title={t("duplicateLayer")}>
             <Copy className="h-4 w-4" />
           </Button>
           <Button
@@ -44,7 +46,7 @@ export const LayersPanel = () => {
             className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={() => deleteLayer()}
             disabled={frame.layers.length <= 1}
-            title="Delete layer"
+            title={t("deleteLayer")}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -79,7 +81,7 @@ export const LayersPanel = () => {
               <button
                 onClick={(e) => { e.stopPropagation(); toggleVisible(layer.id); }}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
-                aria-label={layer.visible ? "Hide layer" : "Show layer"}
+                 aria-label={layer.visible ? t("hideLayer") : t("showLayer")}
               >
                 {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4 opacity-50" />}
               </button>
@@ -100,7 +102,7 @@ export const LayersPanel = () => {
                 <button
                   onDoubleClick={(e) => { e.stopPropagation(); setEditingId(layer.id); setDraftName(layer.name); }}
                   className={cn("flex-1 text-left text-xs truncate font-semibold", !layer.visible && "opacity-50")}
-                  title="Double-click to rename"
+                   title={t("renameLayer")}
                 >
                   {layer.name}
                 </button>

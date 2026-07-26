@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -26,8 +27,11 @@ import {
 import { toggleTheme } from "@/animation/hooks";
 import { toast } from "sonner";
 import { KodlandLogo } from "./KodlandLogo";
+import { PlanetIcon } from "./PlanetIcon";
+import { LANGUAGES, useI18n } from "@/i18n";
 
 export const TopBar = () => {
+  const { language, setLanguage, t } = useI18n();
   const project = useStore((s) => s.project);
   const setProjectMeta = useStore((s) => s.setProjectMeta);
   const newProject = useStore((s) => s.newProject);
@@ -48,13 +52,13 @@ export const TopBar = () => {
   const [showHelp, setShowHelp] = useState(false);
 
   const handleExportGif = async () => {
-    setExporting("Rendering GIF…");
+      setExporting("Rendering GIF…");
     try {
       await exportGif(project, (p) => setExporting(`Rendering GIF… ${Math.round(p * 100)}%`));
-      toast.success("GIF exported!");
+      toast.success(t("gifExported"));
     } catch (e) {
       console.error(e);
-      toast.error("GIF export failed");
+      toast.error(t("gifExportFailed"));
     } finally {
       setExporting(null);
     }
@@ -64,9 +68,9 @@ export const TopBar = () => {
     setExporting("Zipping PNGs…");
     try {
       await exportPngSequence(project);
-      toast.success("PNG sequence saved!");
+      toast.success(t("pngSaved"));
     } catch {
-      toast.error("Export failed");
+      toast.error(t("exportFailed"));
     } finally {
       setExporting(null);
     }
@@ -78,9 +82,9 @@ export const TopBar = () => {
     try {
       const p = await loadProjectFile(f);
       loadProject(p);
-      toast.success("Project loaded");
+      toast.success(t("projectLoaded"));
     } catch {
-      toast.error("Could not load project");
+      toast.error(t("projectLoadFailed"));
     } finally {
       e.target.value = "";
     }
@@ -104,12 +108,12 @@ export const TopBar = () => {
           const h = img.height * scale;
           ctx.drawImage(img, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
           updateActiveLayerData(cv.toDataURL("image/png"));
-          toast.success("Image imported as frame");
+          toast.success(t("imageImported"));
         };
         img.src = dataUrl;
       });
     } catch {
-      toast.error("Could not import image");
+      toast.error(t("imageImportFailed"));
     } finally {
       e.target.value = "";
     }
@@ -125,15 +129,15 @@ export const TopBar = () => {
           value={project.name}
           onChange={(e) => setProjectMeta({ name: e.target.value })}
           className="h-8 w-44 sm:w-56 font-bold border-transparent bg-transparent hover:bg-muted focus-visible:bg-background"
-          aria-label="Project name"
+           aria-label={t("projectName")}
         />
       </div>
 
       <div className="ml-auto flex items-center gap-1">
-        <Button size="icon" variant="ghost" onClick={undo} aria-label="Undo" title="Undo (Ctrl+Z)">
+         <Button size="icon" variant="ghost" onClick={undo} aria-label={t("undo")} title={`${t("undo")} (Ctrl+Z)`}>
           <Undo2 className="h-4 w-4" />
         </Button>
-        <Button size="icon" variant="ghost" onClick={redo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+         <Button size="icon" variant="ghost" onClick={redo} aria-label={t("redo")} title={`${t("redo")} (Ctrl+Shift+Z)`}>
           <Redo2 className="h-4 w-4" />
         </Button>
 
@@ -142,28 +146,28 @@ export const TopBar = () => {
         <Dialog open={showNew} onOpenChange={setShowNew}>
           <DialogTrigger asChild>
             <Button size="sm" variant="ghost" className="gap-1.5 hidden sm:inline-flex">
-              <FilePlus2 className="h-4 w-4" /> New
+               <FilePlus2 className="h-4 w-4" /> {t("new")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>New animation</DialogTitle>
-              <DialogDescription>Choose your canvas size. You can change it any time.</DialogDescription>
+             <DialogTitle>{t("newAnimation")}</DialogTitle>
+             <DialogDescription>{t("chooseCanvas")}</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-bold text-muted-foreground">Width</label>
+                 <label className="text-xs font-bold text-muted-foreground">{t("width")}</label>
                 <Input type="number" value={newW} onChange={(e) => setNewW(+e.target.value)} min={64} max={1920} />
               </div>
               <div>
-                <label className="text-xs font-bold text-muted-foreground">Height</label>
+                 <label className="text-xs font-bold text-muted-foreground">{t("height")}</label>
                 <Input type="number" value={newH} onChange={(e) => setNewH(+e.target.value)} min={64} max={1920} />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowNew(false)}>Cancel</Button>
-              <Button onClick={() => { newProject(newW, newH); setShowNew(false); toast.success("New project!"); }}>
-                Create
+               <Button variant="ghost" onClick={() => setShowNew(false)}>{t("cancel")}</Button>
+               <Button onClick={() => { newProject(newW, newH); setShowNew(false); toast.success(t("newProjectCreated")); }}>
+                 {t("create")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -172,19 +176,19 @@ export const TopBar = () => {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="gap-1.5 bg-gradient-primary text-primary-foreground hover:opacity-90 rounded-xl">
-              <Download className="h-4 w-4" /> Export
+               <Download className="h-4 w-4" /> {t("export")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={handleExportGif} className="gap-2">
-              <ImageIcon className="h-4 w-4" /> Animated GIF
+               <ImageIcon className="h-4 w-4" /> {t("animatedGif")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleExportPng} className="gap-2">
-              <FileDown className="h-4 w-4" /> PNG sequence (.zip)
+               <FileDown className="h-4 w-4" /> {t("pngSequence")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => saveProjectFile(project)} className="gap-2">
-              <Save className="h-4 w-4" /> Save project (.json)
+               <Save className="h-4 w-4" /> {t("saveProject")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -192,23 +196,40 @@ export const TopBar = () => {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="secondary" className="gap-1.5 rounded-xl">
-              <Upload className="h-4 w-4" /> Open
+               <Upload className="h-4 w-4" /> {t("open")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={() => projectRef.current?.click()} className="gap-2">
-              <Save className="h-4 w-4" /> Open project (.json)
+               <Save className="h-4 w-4" /> {t("openProject")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => imageRef.current?.click()} className="gap-2">
-              <ImageIcon className="h-4 w-4" /> Import image as frame
+               <ImageIcon className="h-4 w-4" /> {t("importImage")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button size="icon" variant="ghost" onClick={() => setShowHelp(true)} aria-label="Help">
+         <DropdownMenu>
+           <DropdownMenuTrigger asChild>
+             <Button size="icon" variant="ghost" aria-label={t("language")} title={t("language")}>
+               <PlanetIcon className="h-4 w-4" />
+             </Button>
+           </DropdownMenuTrigger>
+           <DropdownMenuContent align="end" className="w-48">
+             <DropdownMenuLabel>{t("language")}</DropdownMenuLabel>
+             <DropdownMenuSeparator />
+             {LANGUAGES.map((item) => (
+               <DropdownMenuItem key={item.id} onClick={() => setLanguage(item.id)} className="gap-2">
+                 <span className={item.id === language ? "font-bold text-primary" : ""}>{item.label}</span>
+               </DropdownMenuItem>
+             ))}
+           </DropdownMenuContent>
+         </DropdownMenu>
+
+         <Button size="icon" variant="ghost" onClick={() => setShowHelp(true)} aria-label={t("help")}>
           <HelpCircle className="h-4 w-4" />
         </Button>
-        <Button size="icon" variant="ghost" onClick={toggleTheme} aria-label="Toggle theme">
+         <Button size="icon" variant="ghost" onClick={toggleTheme} aria-label={t("toggleTheme")}>
           <Sun className="h-4 w-4 dark:hidden" />
           <Moon className="h-4 w-4 hidden dark:inline" />
         </Button>
@@ -232,8 +253,8 @@ export const TopBar = () => {
       <Dialog open={showHelp} onOpenChange={setShowHelp}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Keyboard shortcuts</DialogTitle>
-            <DialogDescription>Speed up your workflow!</DialogDescription>
+             <DialogTitle>{t("keyboardShortcuts")}</DialogTitle>
+             <DialogDescription>{t("speedWorkflow")}</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2 text-sm">
             {[

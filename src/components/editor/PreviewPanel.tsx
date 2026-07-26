@@ -4,10 +4,12 @@ import { loadImage } from "@/animation/utils";
 import { Play, Pause, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 export const PreviewPanel = () => {
   const project = useStore((s) => s.project);
   const setProjectMeta = useStore((s) => s.setProjectMeta);
+  const { t } = useI18n();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [playing, setPlaying] = useState(true);
@@ -68,7 +70,7 @@ export const PreviewPanel = () => {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Preview</h3>
+      <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">{t("preview")}</h3>
       <div className="rounded-xl overflow-hidden bg-canvas border border-border relative aspect-[4/3] flex items-center justify-center">
         <div className="relative w-full h-full flex items-center justify-center p-2">
           <div
@@ -97,7 +99,7 @@ export const PreviewPanel = () => {
           )}
         >
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          {playing ? "Pause" : "Play"}
+          {playing ? t("pause") : t("play")}
         </Button>
         <button
           onClick={() => setProjectMeta({ loop: !project.loop })}
@@ -106,7 +108,7 @@ export const PreviewPanel = () => {
             project.loop ? "bg-accent text-accent-foreground" : "bg-secondary text-secondary-foreground",
           )}
           aria-pressed={project.loop}
-          title="Loop"
+          title={t("loop")}
         >
           <RotateCw className="h-3.5 w-3.5" />
         </button>

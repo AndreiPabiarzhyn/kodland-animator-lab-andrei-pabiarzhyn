@@ -30,4 +30,10 @@ export default tseslint.config(
       "react-refresh/only-export-components": "off",
     },
   },
+  {
+    files: ["src/i18n.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 );

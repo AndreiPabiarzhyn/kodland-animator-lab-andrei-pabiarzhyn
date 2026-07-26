@@ -7,8 +7,10 @@ import { DrawingCanvas } from "@/components/editor/DrawingCanvas";
 import { LayersPanel } from "@/components/editor/LayersPanel";
 import { PreviewPanel } from "@/components/editor/PreviewPanel";
 import { useAutosave, useShortcuts, useTheme } from "@/animation/hooks";
+import { useI18n } from "@/i18n";
 
 const Index = () => {
+  const { t } = useI18n();
   useTheme();
   useAutosave();
   useShortcuts();
@@ -23,7 +25,7 @@ const Index = () => {
         {/* Left tools panel */}
         <aside className="w-[260px] shrink-0 border-r border-border bg-card/50 backdrop-blur p-3 overflow-y-auto scrollbar-thin space-y-4">
           <section>
-            <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Tools</h2>
+            <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">{t("tools")}</h2>
             <ToolPalette />
           </section>
           <section className="panel p-3">
@@ -33,7 +35,7 @@ const Index = () => {
             <OnionPanel />
           </section>
           <p className="text-[11px] text-muted-foreground leading-relaxed px-1">
-            Tip: scroll to zoom, hold <kbd className="font-mono bg-muted px-1 rounded">Shift</kbd> + drag to pan.
+             {t("tip")} <kbd className="font-mono bg-muted px-1 rounded">{t("shift")}</kbd> {t("drag")}
           </p>
         </aside>
 
@@ -57,8 +59,8 @@ const Index = () => {
       </main>
 
       <footer className="h-8 shrink-0 border-t border-border bg-card/60 backdrop-blur px-4 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>Created by <span className="font-bold text-foreground">Andrei Pobiarzhyn</span></span>
-        <span className="hidden sm:inline">Версия приложения 0.21</span>
+        <span>{t("createdBy")} <span className="font-bold text-foreground">Andrei Pobiarzhyn</span></span>
+        <span className="hidden sm:inline">{t("version")}</span>
       </footer>
     </div>
   );

@@ -3,6 +3,7 @@ import { Plus, Minus as MinusIcon, Maximize2 } from "lucide-react";
 import { useStore } from "@/animation/store";
 import { ONION_OPACITY, ONION_TINT } from "@/animation/types";
 import { floodFill, hexToRgba, hexToRgbArr, loadImage, rgbToHex, clamp } from "@/animation/utils";
+import { useI18n } from "@/i18n";
 
 interface Props { className?: string }
 
@@ -28,6 +29,7 @@ const MAX_ZOOM = 16;
 const MIN_VISIBLE = 80; // keep at least this many px of canvas inside viewport
 
 export const DrawingCanvas = ({ className }: Props) => {
+  const { t } = useI18n();
   const wrapRef = useRef<HTMLDivElement>(null);
   const belowRef = useRef<HTMLCanvasElement>(null);   // layers strictly below active
   const aboveRef = useRef<HTMLCanvasElement>(null);   // layers strictly above active
@@ -1044,7 +1046,7 @@ export const DrawingCanvas = ({ className }: Props) => {
         <button
           type="button"
           onClick={() => zoomAtCenter(1.2)}
-          aria-label="Zoom in"
+           aria-label={t("zoomIn")}
           className="h-8 w-8 rounded-lg bg-background/85 hover:bg-background shadow-tool border border-border flex items-center justify-center text-foreground transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -1052,7 +1054,7 @@ export const DrawingCanvas = ({ className }: Props) => {
         <button
           type="button"
           onClick={() => zoomAtCenter(1 / 1.2)}
-          aria-label="Zoom out"
+           aria-label={t("zoomOut")}
           className="h-8 w-8 rounded-lg bg-background/85 hover:bg-background shadow-tool border border-border flex items-center justify-center text-foreground transition-colors"
         >
           <MinusIcon className="h-4 w-4" />
@@ -1060,8 +1062,8 @@ export const DrawingCanvas = ({ className }: Props) => {
         <button
           type="button"
           onClick={centerView}
-          aria-label="Center & fit"
-          title="Center & fit"
+           aria-label={t("centerFit")}
+           title={t("centerFit")}
           className="h-8 w-8 rounded-lg bg-background/85 hover:bg-background shadow-tool border border-border flex items-center justify-center text-foreground transition-colors"
         >
           <Maximize2 className="h-4 w-4" />
